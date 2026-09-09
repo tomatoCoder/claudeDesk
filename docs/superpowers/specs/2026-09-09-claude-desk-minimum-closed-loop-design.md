@@ -1,77 +1,77 @@
-# Claude Desk Minimum Closed-Loop Design
+# Claude Desk 最小闭环设计
 
-**Date:** 2026-09-09
+**日期：** 2026-09-09
 
-**Status:** Approved in conversation
+**状态：** 已在对话中确认
 
-**Target:** Locally installable macOS and Windows desktop application
+**目标：** 可在 macOS 和 Windows 本地安装使用的桌面应用
 
-**Stack:** Tauri 2, Vue 3, TypeScript, Rust, Claude Agent SDK, locally installed Claude CLI
+**技术栈：** Tauri 2、Vue 3、TypeScript、Rust、Claude Agent SDK、本机已安装的 Claude CLI
 
-## 1. Purpose
+## 1. 项目目标
 
-Claude Desk is a small desktop shell around the user's locally installed Claude CLI. It borrows the project-and-session navigation model of Codex while preserving Claude Code's own configuration, project instructions, sessions, tools, and permission behavior.
+Claude Desk 是一层运行在用户本机 Claude CLI 之上的轻量桌面外壳。它参考 Codex 的项目与会话导航方式，同时保留 Claude Code 原有的配置、项目指令、会话、工具和权限行为。
 
-The first release is deliberately limited to one complete loop:
+首个版本有意限制为一个完整闭环：
 
-1. Detect the local Claude CLI.
-2. Read local Claude projects and sessions.
-3. Create or resume a session.
-4. Send a prompt and stream the response.
-5. Display tool activity and collect permission decisions.
-6. Keep multiple sessions running concurrently.
-7. Read and update the selected user-level Claude environment settings.
-8. Produce locally installable macOS and Windows packages.
+1. 检测本机 Claude CLI。
+2. 读取本机 Claude 项目和会话。
+3. 创建或恢复会话。
+4. 发送提示词并流式展示响应。
+5. 展示工具执行活动并收集权限决定。
+6. 支持多个会话并行运行。
+7. 读取和更新指定的用户级 Claude 环境配置。
+8. 生成可在 macOS 和 Windows 本地安装的安装包。
 
-This specification replaces the broader feature scope in the earlier Claude Desk design for the MVP implementation. Features excluded here remain future work.
+对于 MVP 实现，本规格将取代较早 Claude Desk 设计中的宽泛功能范围。本规格明确排除的功能留待后续版本处理。
 
-## 2. Confirmed Product Decisions
+## 2. 已确认的产品决策
 
-### 2.1 Claude CLI dependency
+### 2.1 Claude CLI 依赖
 
-- Claude Desk uses the Claude CLI installed and authenticated by the user.
-- The app does not download, install, bundle, update, or authenticate Claude CLI.
-- On startup, the app locates the executable and verifies it with `claude --version`.
-- If detection fails, the app provides installation/login guidance and a retry action.
-- Windows MVP supports a native Windows Claude CLI only. WSL integration is excluded.
+- Claude Desk 使用由用户自行安装并完成认证的 Claude CLI。
+- App 不负责下载、安装、内置、更新 Claude CLI，也不在 App 内完成 Claude 登录。
+- App 启动时定位 Claude 可执行文件，并通过 `claude --version` 验证其可用性。
+- 检测失败时，App 提供安装或登录指引以及重新检测操作。
+- Windows MVP 只支持原生 Windows Claude CLI，不支持 WSL 集成。
 
-### 2.2 Project and session behavior
+### 2.2 项目与会话行为
 
-- The sidebar is a two-level hierarchy: project, then session.
-- Projects are discovered from Claude's local history and can also be added with a native folder picker.
-- Existing Claude CLI sessions are shown and can be resumed.
-- Sessions created in Claude Desk remain compatible with the CLI session store.
-- Sessions support create, open, resume, rename, and recoverable delete.
-- Session titles come from Claude session metadata unless the user renames them.
-- Deletion moves the selected session's transcript and same-session companion data to the operating system trash/recycle bin after a confirmation dialog.
-- Deletion never purges the entire project or modifies project source files.
+- 侧边栏采用“项目 → 会话”两级结构。
+- 项目从 Claude 本地历史记录中自动发现，同时允许通过系统文件夹选择器手动添加。
+- 展示已有 Claude CLI 会话，并支持恢复会话。
+- 在 Claude Desk 中创建的会话继续兼容 Claude CLI 会话存储。
+- 会话支持创建、打开、恢复、重命名和可恢复删除。
+- 除非用户主动重命名，否则会话标题沿用 Claude 会话元数据。
+- 用户确认删除后，将所选会话的 transcript 及同会话附属数据移入操作系统废纸篓或回收站。
+- 删除会话不会清理整个项目，也不会修改项目源码文件。
 
-### 2.3 Conversation behavior
+### 2.3 对话行为
 
-- Responses stream into the conversation view.
-- The view renders user and assistant messages, Markdown, code blocks, tool-call state, errors, and retry controls.
-- The user can stop an active response.
-- Tool actions that require approval are presented in Claude Desk with Allow and Deny actions.
-- If a permission request loses its UI connection, times out, or the app exits, the action is denied.
-- One session accepts only one active turn at a time.
-- Different sessions may run concurrently without a fixed app-level concurrency limit.
-- Switching projects or sessions does not interrupt running work.
-- Closing the app while work is active shows a confirmation dialog. Confirming exit terminates all Claude Desk-owned Claude processes.
+- 响应以流式方式显示在对话区。
+- 对话区展示用户消息、助手消息、Markdown、代码块、工具调用状态、错误和重试操作。
+- 用户可以停止当前响应。
+- 工具操作需要授权时，由 Claude Desk 展示“允许”和“拒绝”操作。
+- 权限请求与界面断开、等待超时或 App 退出时，默认拒绝该操作。
+- 同一个会话同一时间只能存在一个活动轮次。
+- 不同会话可以并行运行，App 不设置固定的全局并发上限。
+- 切换项目或会话不会中断正在执行的任务。
+- 存在运行中任务时关闭 App，需要先弹出确认对话框；用户确认退出后，终止所有由 Claude Desk 启动的 Claude 进程。
 
-### 2.4 Model behavior
+### 2.4 模型行为
 
-- New sessions use the current configured model.
-- Resumed sessions preserve the model stored with that session, matching native Claude CLI behavior.
-- Changing the model setting does not mutate already-running or resumed sessions.
+- 新会话使用当前配置的模型。
+- 恢复历史会话时保留该会话原来的模型，与 Claude CLI 原生行为一致。
+- 修改模型配置不会改变正在运行或已经恢复的会话。
 
-### 2.5 User settings
+### 2.5 用户设置
 
-Claude Desk reads and updates the user-level Claude settings file:
+Claude Desk 读取和更新用户级 Claude 设置文件：
 
-- macOS: `~/.claude/settings.json`
-- Windows: `%USERPROFILE%\\.claude\\settings.json`
+- macOS：`~/.claude/settings.json`
+- Windows：`%USERPROFILE%\.claude\settings.json`
 
-Only these values under `env` are managed in the MVP:
+MVP 只管理 `env` 下的以下三个值：
 
 ```json
 {
@@ -83,392 +83,392 @@ Only these values under `env` are managed in the MVP:
 }
 ```
 
-Other keys and values must remain semantically unchanged. The app watches the settings file and refreshes the form after external changes. If the form has unsaved edits, an external change produces a conflict notice instead of silently replacing either version.
+其他键和值在语义上必须保持不变。App 监听设置文件，并在文件被外部修改后刷新表单。如果表单中存在未保存的编辑，外部变更将触发冲突提示，不会静默覆盖任一版本。
 
-`ANTHROPIC_AUTH_TOKEN` is intentionally stored in `settings.json` for compatibility with the user's chosen Claude Code configuration. The field is masked by default and may be revealed temporarily. It must not be copied into UI persistence, diagnostics, or logs.
+根据用户选择，为兼容 Claude Code 配置方式，`ANTHROPIC_AUTH_TOKEN` 直接保存在 `settings.json` 中。该字段默认以掩码显示，并支持临时显示明文。Token 不得写入界面持久化数据、诊断信息或日志。
 
-## 3. Scope
+## 3. 功能范围
 
-### 3.1 Included
+### 3.1 包含范围
 
-- Claude CLI discovery, validation, and error guidance.
-- Automatic project discovery from local Claude history.
-- Manual addition of local project folders.
-- Project/session sidebar.
-- Session creation, reading, resumption, rename, and recoverable deletion.
-- Streaming conversation UI.
-- Markdown and fenced-code rendering.
-- Tool-call progress and approval UI.
-- Stop and retry behavior.
-- Concurrent execution across sessions.
-- Settings synchronization for the three agreed environment values.
-- Claude Code-inspired dark theme.
-- Unsigned macOS Apple Silicon DMG.
-- Unsigned Windows x64 installer.
+- Claude CLI 发现、验证和错误引导。
+- 从 Claude 本地历史记录自动发现项目。
+- 手动添加本地项目文件夹。
+- 项目与会话侧边栏。
+- 会话创建、读取、恢复、重命名和可恢复删除。
+- 流式对话界面。
+- Markdown 和围栏代码块渲染。
+- 工具调用进度和权限审批界面。
+- 停止和重试。
+- 多会话并行执行。
+- 三个已确认环境配置项的同步。
+- Claude Code 风格的深色主题。
+- 未签名的 macOS Apple Silicon DMG。
+- 未签名的 Windows x64 安装程序。
 
-### 3.2 Explicitly excluded
+### 3.2 明确排除
 
-- Embedded terminal.
-- Git diff, code review, or worktree UI.
-- Cloud synchronization or remote tasks.
-- CLI installation, update, or in-app login.
-- Auto-update and release publishing.
-- Code signing, notarization, or app-store distribution.
-- Light theme.
-- Intel macOS, Windows ARM64, and WSL.
-- MCP configuration UI.
-- Full `settings.json` editor.
-- Per-project settings editing.
-- Search, favorites, archive, and session branching UI.
-- Configurable concurrency limits or a run queue.
+- 内嵌终端。
+- Git Diff、代码审查或 worktree 界面。
+- 云端同步或远程任务。
+- CLI 安装、更新或 App 内登录。
+- 自动更新和正式发布流程。
+- 代码签名、公证或应用商店发布。
+- 浅色主题。
+- Intel Mac、Windows ARM64 和 WSL。
+- MCP 配置管理界面。
+- 完整的 `settings.json` 编辑器。
+- 项目级设置编辑。
+- 搜索、收藏、归档和会话分支界面。
+- 可配置的并发上限或任务队列。
 
-## 4. Experience Design
+## 4. 体验设计
 
-### 4.1 Visual language
+### 4.1 视觉语言
 
-The application uses one dark theme based on the supplied Claude Code reference:
+App 只提供一种深色主题，并以用户提供的 Claude Code 参考图为基础：
 
-- black and charcoal surfaces;
-- warm white primary text;
-- muted gray secondary text and borders;
-- Claude orange for primary actions, selection, and active states;
-- restrained shadows and no decorative gradients.
+- 黑色和炭灰色界面表面；
+- 暖白色主要文字；
+- 低饱和灰色次要文字和边框；
+- Claude 橙色用于主要操作、选中状态和活动状态；
+- 克制使用阴影，不使用装饰性渐变。
 
-The app should feel like Claude Code presented through a focused native desktop shell, not like a generic web dashboard.
+整体体验应当像是将 Claude Code 放入专注、原生的桌面外壳中，而不是通用 Web 管理后台。
 
-### 4.2 Sidebar
+### 4.2 侧边栏
 
-The fixed left sidebar contains:
+固定在左侧的侧边栏包含：
 
-- Claude Desk identity;
-- new-session action;
-- add-project action;
-- collapsible project rows;
-- nested session rows;
-- per-session run status;
-- settings entry at the bottom.
+- Claude Desk 标识；
+- 新建会话操作；
+- 添加项目操作；
+- 可展开和折叠的项目行；
+- 嵌套在项目下的会话行；
+- 每个会话的运行状态；
+- 底部设置入口。
 
-Session states shown in the sidebar are:
+侧边栏显示以下会话状态：
 
-- idle;
-- running;
-- awaiting permission;
-- completed;
-- failed;
-- interrupted.
+- 空闲；
+- 运行中；
+- 等待授权；
+- 已完成；
+- 失败；
+- 已中断。
 
-Rename and Delete are available from a session context menu. Delete requires a second confirmation showing project, title, and last activity time.
+会话右键菜单提供“重命名”和“删除”。删除操作需要二次确认，并展示项目、会话标题和最后活动时间。
 
-### 4.3 Conversation area
+### 4.3 对话区域
 
-The main area contains:
+主区域包含：
 
-- a header with project, session title, and status;
-- a scrollable transcript;
-- tool-call cards embedded in chronological order;
-- permission cards with Allow and Deny controls;
-- an error card with retry when appropriate;
-- a composer with send and stop actions;
-- the effective model displayed as read-only session information.
+- 展示项目、会话标题和状态的顶部栏；
+- 可滚动的会话记录；
+- 按时间顺序嵌入的工具调用卡片；
+- 带“允许”和“拒绝”操作的权限卡片；
+- 适用时带重试操作的错误卡片；
+- 带发送和停止操作的输入区；
+- 以只读会话信息展示的实际模型。
 
-While a turn is active in a session, its composer cannot submit a second turn. Other sessions remain usable.
+某个会话存在活动轮次时，该会话的输入区不能再次提交；其他会话仍然可以正常使用。
 
-### 4.4 Settings area
+### 4.4 设置区域
 
-The settings screen contains three fields:
+设置页包含三个字段：
 
-- masked `ANTHROPIC_AUTH_TOKEN` with a temporary reveal control;
-- `ANTHROPIC_BASE_URL` with basic URL validation;
-- `ANTHROPIC_MODEL` as free text so custom gateway model identifiers are supported.
+- 默认掩码显示、支持临时查看的 `ANTHROPIC_AUTH_TOKEN`；
+- 带基础 URL 校验的 `ANTHROPIC_BASE_URL`；
+- 可自由输入的 `ANTHROPIC_MODEL`，以支持自定义网关模型标识符。
 
-It also shows the detected Claude executable path and version, with a retry-detection action.
+设置页同时显示检测到的 Claude 可执行文件路径和版本，并提供重新检测操作。
 
-## 5. Architecture
+## 5. 系统架构
 
 ```text
-Vue 3 + TypeScript UI
+Vue 3 + TypeScript 界面
           |
        Tauri IPC
           |
-Tauri / Rust desktop core
+Tauri / Rust 桌面核心
           |
-   local sidecar IPC
+   本地 sidecar IPC
           |
 TypeScript Agent Bridge
           |
-locally installed Claude CLI
+本机已安装的 Claude CLI
 ```
 
-### 5.1 Vue application
+### 5.1 Vue 应用
 
-The Vue layer owns presentation state only:
+Vue 层只负责界面展示状态：
 
-- selected project/session;
-- sidebar expansion;
-- normalized transcript view models;
-- run indicators;
-- draft input;
-- permission dialogs/cards;
-- settings form state.
+- 当前选中的项目和会话；
+- 侧边栏展开状态；
+- 标准化后的会话记录视图模型；
+- 运行状态标识；
+- 输入草稿；
+- 权限弹窗或卡片；
+- 设置表单状态。
 
-It never reads Claude files directly and never persists the auth token.
+Vue 层不直接读取 Claude 文件，也不持久化保存认证 Token。
 
-### 5.2 Tauri/Rust core
+### 5.2 Tauri/Rust 核心
 
-The Rust layer owns trusted desktop operations:
+Rust 层负责可信桌面操作：
 
-- Claude executable discovery and verification;
-- starting and supervising Agent Bridge processes;
-- routing IPC events to the correct window/session;
-- filesystem watching;
-- safe settings reads and writes;
-- native folder selection;
-- moving session data to trash/recycle bin;
-- application shutdown coordination;
-- redacted local diagnostics.
+- 发现并验证 Claude 可执行文件；
+- 启动和监管 Agent Bridge 进程；
+- 将 IPC 事件路由到正确的窗口和会话；
+- 监听文件系统变化；
+- 安全读写设置文件；
+- 调用原生文件夹选择器；
+- 将会话数据移入废纸篓或回收站；
+- 协调应用退出流程；
+- 生成经过脱敏的本地诊断日志。
 
 ### 5.3 TypeScript Agent Bridge
 
-The bridge uses `@anthropic-ai/claude-agent-sdk` and sets `pathToClaudeCodeExecutable` to the executable found by the Rust layer. The SDK's own platform CLI binary is not used for the MVP. The same compiled sidecar supports two invocation modes: short-lived catalog commands for session metadata, and a long-lived run worker for one active Claude turn.
+Bridge 使用 `@anthropic-ai/claude-agent-sdk`，并将 `pathToClaudeCodeExecutable` 指向 Rust 层发现的 Claude 可执行文件。MVP 不使用 SDK 自带的平台 Claude CLI 二进制文件。同一个已编译 sidecar 支持两种调用模式：用于会话元数据的短生命周期目录命令，以及服务于单个活动 Claude 轮次的长生命周期 run worker。
 
-The bridge owns:
+Bridge 负责：
 
-- `query()` lifecycle and stream consumption;
-- new and resumed session options;
-- `AbortController` cancellation;
-- conversion of SDK messages into a small versioned IPC event schema;
-- `canUseTool` permission callbacks;
-- session enumeration and transcript reads;
-- SDK-backed session metadata and rename operations.
+- 管理 `query()` 生命周期和消费流式消息；
+- 处理新会话和恢复会话的参数；
+- 使用 `AbortController` 取消执行；
+- 将 SDK 消息转换为小型、带版本号的 IPC 事件协议；
+- 处理 `canUseTool` 权限回调；
+- 枚举会话并读取会话记录；
+- 执行 SDK 支持的会话元数据读取和重命名。
 
-Each active turn receives its own run-worker process. This isolates failures between concurrently running sessions and gives Rust an unambiguous process to stop. The bridge is compiled as a platform-specific standalone sidecar, so end users do not need Node.js or Bun. Separate binaries are produced for macOS arm64 and Windows x64.
+每个活动轮次拥有独立的 run-worker 进程。这样可以隔离并行会话之间的故障，并为 Rust 提供明确可停止的目标进程。Bridge 被编译为特定平台的独立 sidecar，因此最终用户不需要另外安装 Node.js 或 Bun。分别生成 macOS arm64 和 Windows x64 二进制文件。
 
-### 5.4 Why this architecture
+### 5.4 选择该架构的原因
 
-The Agent SDK exposes the programmatic primitives required by the MVP—streaming, cancellation, permission callbacks, session enumeration, transcript reads, and renaming—while still using Claude Code's filesystem settings and session format. Keeping those semantics in a narrow sidecar avoids reimplementing Claude's event protocol in Rust and keeps privileged operating-system work in Tauri.
+Agent SDK 提供 MVP 所需的程序化能力，包括流式输出、取消、权限回调、会话枚举、会话记录读取和重命名，同时沿用 Claude Code 的文件系统设置和会话格式。将这些语义限制在一个职责单一的 sidecar 中，可以避免在 Rust 中重新实现 Claude 事件协议，并让高权限操作系统能力继续由 Tauri 管理。
 
-## 6. Runtime Data Flow
+## 6. 运行时数据流
 
-### 6.1 Startup
+### 6.1 启动流程
 
-1. Rust checks PATH and platform-specific common locations for `claude`.
-2. Rust runs `claude --version` with a timeout.
-3. Rust runs an Agent Bridge handshake and supplies the verified path.
-4. Rust reads and watches the user settings file.
-5. Rust invokes the bridge's catalog command to enumerate Claude sessions and return normalized project/session summaries.
-6. Vue renders the last selected session or an empty state.
+1. Rust 从 PATH 和各平台常见安装位置查找 `claude`。
+2. Rust 执行带超时的 `claude --version`。
+3. Rust 执行 Agent Bridge 握手，并向其提供已验证的 Claude 路径。
+4. Rust 读取并监听用户设置文件。
+5. Rust 调用 Bridge 的目录命令，枚举 Claude 会话并返回标准化的项目与会话摘要。
+6. Vue 展示上次选中的会话；没有记录时展示空状态。
 
-### 6.2 New session
+### 6.2 新建会话
 
-1. The user selects a project and submits a prompt.
-2. Vue sends `run.start` with a client-generated run ID, project path, and prompt.
-3. Rust starts a dedicated bridge run worker for the turn.
-4. The worker starts `query()` with the project as `cwd` and the detected CLI path.
-5. The SDK initialization event supplies the persistent Claude session ID.
-6. The provisional UI entry is reconciled with that session ID.
-7. Stream events are normalized, tagged with both IDs, and routed to Vue.
-8. On completion, the session list and metadata are refreshed.
+1. 用户选择项目并提交提示词。
+2. Vue 发送 `run.start`，其中包含客户端生成的 run ID、项目路径和提示词。
+3. Rust 为该轮次启动独立的 Bridge run worker。
+4. Worker 以项目路径作为 `cwd`，并使用检测到的 Claude CLI 路径启动 `query()`。
+5. SDK 初始化事件返回可持久化的 Claude session ID。
+6. 将界面中的临时会话条目与该 session ID 关联。
+7. 流式事件经过标准化并携带两个 ID，然后被路由到 Vue。
+8. 执行结束后刷新会话列表和元数据。
 
-### 6.3 Resume session
+### 6.3 恢复会话
 
-1. The user opens an existing session and submits a prompt.
-2. Rust starts a dedicated bridge run worker, which calls `query()` with the stored session ID as `resume`.
-3. No model override is passed, preserving Claude CLI's session model behavior.
-4. Events follow the same path as a new session.
+1. 用户打开已有会话并提交提示词。
+2. Rust 启动独立的 Bridge run worker；Worker 以保存的 session ID 作为 `resume` 参数调用 `query()`。
+3. 不传入模型覆盖参数，从而保留 Claude CLI 原生的历史会话模型行为。
+4. 后续事件沿用新建会话的数据路径。
 
-### 6.4 Permission request
+### 6.4 权限请求
 
-1. The SDK invokes the bridge's permission callback.
-2. The bridge emits a permission request with a unique request ID, tool name, and structured input.
-3. Vue renders a permission card.
-4. Allow returns the unmodified input; Deny returns a concise user-facing reason.
-5. Disconnect, timeout, shutdown, or missing request state resolves as Deny.
+1. SDK 调用 Bridge 的权限回调。
+2. Bridge 发出权限请求，其中包含唯一 request ID、工具名称和结构化输入。
+3. Vue 展示权限卡片。
+4. 用户允许时返回未经修改的输入；用户拒绝时返回简明的拒绝原因。
+5. 通信断开、等待超时、App 退出或请求状态丢失时，统一按拒绝处理。
 
-### 6.5 Stop and shutdown
+### 6.5 停止与退出
 
-- Stop aborts only the selected session's active SDK query.
-- Unexpected run-worker exit marks only its owning run as interrupted.
-- App shutdown blocks while a confirmation dialog is open.
-- Confirmed shutdown first denies outstanding permissions, then aborts queries, then terminates remaining child processes with a bounded grace period.
+- 停止操作只中止当前所选会话的活动 SDK 查询。
+- run worker 异常退出时，只将其所属的轮次标记为已中断。
+- 退出确认框打开期间阻止 App 关闭。
+- 用户确认退出后，先拒绝所有未完成的权限请求，再中止查询，最后在有限宽限时间后终止残留子进程。
 
-## 7. Process and State Model
+## 7. 进程与状态模型
 
-Rust maintains a registry keyed by active run ID. Each entry contains:
+Rust 维护一个以活动 run ID 为键的注册表。每一项包含：
 
-- Claude session ID when known;
-- project path;
-- bridge process/channel;
-- current lifecycle state;
-- pending permission request IDs;
-- start timestamp;
-- last event timestamp.
+- 已知时的 Claude session ID；
+- 项目路径；
+- Bridge 进程或通道；
+- 当前生命周期状态；
+- 等待处理的权限 request ID；
+- 开始时间；
+- 最后事件时间。
 
-Every event includes a protocol version, run ID, optional session ID, sequence number, and payload. Vue ignores stale events whose run ID no longer matches the active run for that session.
+每个事件都包含协议版本、run ID、可选的 session ID、序列号和负载。某个事件的 run ID 与该会话当前活动轮次不匹配时，Vue 忽略该过期事件。
 
-There is no global concurrency cap. Resource usage is user-controlled. The app prevents duplicate simultaneous turns for the same session because Claude transcripts can interleave if one session ID is resumed by multiple processes.
+App 不设置全局并发上限，资源使用由用户自行控制。同一个 session ID 被多个进程同时恢复时，Claude 会话记录可能交错，因此 App 必须阻止同一会话同时执行多个轮次。
 
-## 8. Settings Synchronization
+## 8. 设置同步
 
-### 8.1 Read behavior
+### 8.1 读取行为
 
-- Missing file is treated as an empty object.
-- Valid JSON is parsed into a generic object.
-- Only `env.ANTHROPIC_AUTH_TOKEN`, `env.ANTHROPIC_BASE_URL`, and `env.ANTHROPIC_MODEL` are projected into the UI.
-- Invalid JSON produces a blocking settings error and is never overwritten.
+- 设置文件不存在时按空对象处理。
+- 有效 JSON 解析为通用对象。
+- 只将 `env.ANTHROPIC_AUTH_TOKEN`、`env.ANTHROPIC_BASE_URL` 和 `env.ANTHROPIC_MODEL` 投射到界面。
+- JSON 无效时展示阻断式设置错误，并且绝不覆盖原文件。
 
-### 8.2 Write behavior
+### 8.2 写入行为
 
-1. Re-read the current file immediately before save.
-2. Detect whether it changed since the form snapshot.
-3. If changed and the form is dirty, show a conflict instead of saving.
-4. Merge only the three managed keys into the latest object.
-5. Create a timestamped backup.
-6. Write a temporary file in the same directory.
-7. Flush and atomically replace the target where supported.
-8. Apply restrictive user-only file permissions where the platform supports them.
-9. Re-read and verify the saved values.
+1. 保存前立即重新读取当前文件。
+2. 检测文件内容是否在表单加载后发生变化。
+3. 文件已变化且表单存在未保存编辑时，展示冲突而不执行保存。
+4. 只将三个受管理字段合并到最新对象中。
+5. 创建带时间戳的备份。
+6. 在同一目录写入临时文件。
+7. 刷新数据，并在平台支持时以原子方式替换目标文件。
+8. 在平台支持时应用仅限当前用户访问的文件权限。
+9. 重新读取文件并验证保存结果。
 
-Empty values remove their individual keys. An empty `env` object may remain; unrelated keys are never removed.
+字段值为空时删除对应字段。允许保留空的 `env` 对象；不得删除其他无关字段。
 
-### 8.3 Watch behavior
+### 8.3 监听行为
 
-- The watcher debounces filesystem events.
-- Clean forms refresh automatically.
-- Dirty forms retain their edits and show an external-change warning.
-- Self-generated write events are reconciled by content version rather than assumed to be external changes.
+- 对文件系统事件进行防抖处理。
+- 表单没有未保存修改时自动刷新。
+- 表单存在未保存修改时保留编辑内容，并展示外部变更警告。
+- 通过内容版本判断自身写入事件，不直接假设所有监听事件均来自外部修改。
 
-## 9. Session Mutation and Deletion
+## 9. 会话修改与删除
 
-- Rename uses the Agent SDK session rename API and refreshes the session summary after success.
-- Delete is disabled for an actively running session.
-- A delete plan is resolved from the exact project key and session ID before confirmation.
-- Only exact, validated paths beneath Claude's application-data directories may be moved.
-- The main transcript and exact same-session companion directories are sent to the OS trash/recycle bin.
-- Failure is reported per path; the UI refreshes from disk rather than assuming success.
-- Claude Desk does not implement restore UI. Recovery is performed through the operating system's trash/recycle bin.
+- 重命名通过 Agent SDK 会话重命名接口完成，成功后刷新会话摘要。
+- 活动会话禁止删除。
+- 确认删除前，根据精确的项目键和 session ID 解析删除计划。
+- 只能移动位于 Claude 应用数据目录下、经过精确验证的目标路径。
+- 将主 transcript 和严格匹配同一会话的附属目录移入操作系统废纸篓或回收站。
+- 每个路径的失败单独报告；界面必须重新从磁盘读取状态，不能假设删除已经成功。
+- Claude Desk 不提供恢复界面；用户通过操作系统废纸篓或回收站恢复数据。
 
-## 10. Failure Handling
+## 10. 故障处理
 
-### 10.1 CLI failures
+### 10.1 CLI 故障
 
-- Missing CLI: setup state with guidance and retry.
-- Version check timeout: failed detection with copyable diagnostics.
-- Authentication/gateway error: keep the draft and offer retry.
-- Non-zero process exit: map known failure categories and retain redacted raw diagnostics.
+- 找不到 CLI：展示配置引导和重新检测入口。
+- 版本检测超时：标记检测失败，并提供可复制的诊断信息。
+- 认证或网关错误：保留用户输入并提供重试。
+- 进程非零退出：映射已知错误类型，同时保留经过脱敏的原始诊断信息。
 
-### 10.2 Bridge and stream failures
+### 10.2 Bridge 与流式事件故障
 
-- Unknown event types are logged and ignored.
-- Malformed individual events do not terminate the UI.
-- A run-worker crash marks only its owning run interrupted and supports a fresh retry.
-- A retry resumes only when a durable session ID exists; otherwise it creates a new turn from the retained prompt.
+- 记录并忽略未知事件类型。
+- 单条事件格式错误时不终止整个界面。
+- run worker 崩溃时只将其所属轮次标记为已中断，并支持重新尝试。
+- 只有存在已持久化 session ID 时，重试才恢复原会话；否则使用保留的提示词创建新轮次。
 
-### 10.3 Data failures
+### 10.3 数据故障
 
-- Malformed transcript lines are skipped for display and never rewritten.
-- A damaged session remains visible with an error marker when its basic metadata can be recovered.
-- Settings parse errors block writes.
-- Token and common secret fields are redacted before logging or display in diagnostics.
+- 展示会话时跳过格式错误的 transcript 行，并且绝不重写原记录。
+- 只要能恢复基本元数据，损坏的会话仍显示在列表中并标记错误。
+- 设置文件解析错误时禁止写入。
+- Token 和常见密钥字段在写入日志或展示诊断信息前必须脱敏。
 
-## 11. Packaging
+## 11. 安装包
 
 ### 11.1 macOS
 
-- Build host: Apple Silicon macOS.
-- Target: `aarch64-apple-darwin`.
-- Bundle: unsigned DMG.
-- Expected artifact: `artifacts/ClaudeDesk_<version>_aarch64.dmg`.
-- Gatekeeper warnings are documented because signing and notarization are out of scope.
+- 构建环境：Apple Silicon macOS。
+- 目标：`aarch64-apple-darwin`。
+- 安装包：未签名 DMG。
+- 预期产物：`artifacts/ClaudeDesk_<version>_aarch64.dmg`。
+- 代码签名与公证不在范围内，因此需要在使用说明中注明 Gatekeeper 警告。
 
 ### 11.2 Windows
 
-- Build host: native Windows x64 or a Windows CI runner.
-- Target: `x86_64-pc-windows-msvc`.
-- Bundle: unsigned NSIS setup executable.
-- Expected artifact: `artifacts/ClaudeDesk_<version>_x64-setup.exe`.
-- SmartScreen warnings are documented because signing is out of scope.
+- 构建环境：原生 Windows x64 或 Windows CI runner。
+- 目标：`x86_64-pc-windows-msvc`。
+- 安装包：未签名的 NSIS 安装程序。
+- 预期产物：`artifacts/ClaudeDesk_<version>_x64-setup.exe`。
+- 代码签名不在范围内，因此需要在使用说明中注明 SmartScreen 警告。
 
-### 11.3 Build policy
+### 11.3 构建策略
 
-- Builds are manual local builds or manually triggered CI jobs.
-- No release is created and artifacts are not published automatically.
-- Each platform bundles its matching compiled Agent Bridge sidecar.
-- Packaging verifies that the bridge is executable and that the app handles a missing user-installed Claude CLI cleanly.
+- 通过本机手动构建或手动触发 CI 构建。
+- 不创建正式 Release，也不自动发布安装包。
+- 每个平台打包与其架构匹配的 Agent Bridge sidecar。
+- 打包流程需要验证 Bridge 具有可执行权限，并验证用户未安装 Claude CLI 时 App 能正常展示错误状态。
 
-## 12. Testing Strategy
+## 12. 测试策略
 
-### 12.1 Unit tests
+### 12.1 单元测试
 
-- Settings parsing, three-key merge, deletion, backup, and redaction.
-- macOS and Windows path normalization and target validation.
-- SDK-to-UI event normalization.
-- Run/session state transitions.
-- Permission allow, deny, disconnect, and timeout behavior.
-- Same-session duplicate-run prevention.
-- Shutdown ordering.
+- 设置解析、三个字段的合并与删除、备份和脱敏。
+- macOS 和 Windows 路径标准化及目标验证。
+- SDK 事件到界面事件的标准化转换。
+- 轮次和会话的状态转换。
+- 权限允许、拒绝、断开和超时行为。
+- 防止同一会话重复并行执行。
+- 退出流程的执行顺序。
 
-### 12.2 Integration tests
+### 12.2 集成测试
 
-A deterministic fake Claude executable is used to exercise:
+使用行为确定的模拟 Claude 可执行文件测试：
 
-- CLI detection;
-- new-session initialization;
-- stream parsing;
-- resumed sessions;
-- tool requests;
-- user approval and denial;
-- cancellation;
-- non-zero exits;
-- malformed events;
-- two or more simultaneous sessions.
+- CLI 检测；
+- 新会话初始化；
+- 流式事件处理；
+- 会话恢复；
+- 工具权限请求；
+- 用户允许和拒绝；
+- 取消执行；
+- 进程非零退出；
+- 异常格式事件；
+- 两个及以上会话同时执行。
 
-These tests do not require credentials and do not consume API quota.
+这些测试不需要认证信息，也不消耗真实 API 额度。
 
-Filesystem fixtures cover existing Claude project/session structures, corrupt JSONL lines, external settings edits, and recoverable session deletion.
+文件系统测试数据覆盖已有 Claude 项目与会话结构、损坏的 JSONL 行、外部设置变更和可恢复会话删除。
 
-### 12.3 Manual smoke tests
+### 12.3 人工冒烟测试
 
-- A real locally authenticated Claude CLI on macOS arm64.
-- A real locally authenticated native Claude CLI on Windows x64.
-- Custom `ANTHROPIC_BASE_URL`, auth token, and model.
-- Installer launch, first-run detection, and uninstall behavior.
+- 在 macOS arm64 上使用已完成认证的真实 Claude CLI。
+- 在 Windows x64 上使用已完成认证的原生 Claude CLI。
+- 使用自定义 `ANTHROPIC_BASE_URL`、认证 Token 和模型。
+- 验证安装程序启动、首次运行检测和卸载行为。
 
-## 13. Acceptance Criteria
+## 13. 验收标准
 
-The MVP is complete only when all of the following are demonstrated:
+只有完成并证明以下全部条件，MVP 才可视为完成：
 
-1. The app detects an installed Claude CLI and handles a missing CLI without crashing.
-2. Existing projects and sessions appear in the sidebar.
-3. A user can add a local project folder.
-4. A new session streams a real Claude response.
-5. An existing CLI session can be opened and continued.
-6. Tool activity is visible and a user can allow or deny a permission request.
-7. The user can stop an active turn and retry a failed turn.
-8. At least two sessions can run at the same time and remain active while the user switches views.
-9. A session can be renamed.
-10. A session can be moved to the OS trash/recycle bin after confirmation.
-11. The settings form reads, watches, and safely updates the three agreed environment fields while preserving all unrelated JSON.
-12. Secrets do not appear in logs or persisted frontend state.
-13. Closing with active work prompts before terminating owned child processes.
-14. Automated unit and fake-CLI integration tests pass.
-15. The macOS arm64 DMG installs and launches on Apple Silicon.
-16. The Windows x64 installer installs and launches on native Windows.
+1. App 能检测已安装的 Claude CLI，并能在 CLI 缺失时正常展示错误而不崩溃。
+2. 侧边栏能够展示已有项目和会话。
+3. 用户能够添加本地项目文件夹。
+4. 新会话能够流式展示真实 Claude 响应。
+5. 能够打开并继续已有 Claude CLI 会话。
+6. 能够展示工具活动，并允许用户批准或拒绝权限请求。
+7. 用户能够停止活动轮次，并重试失败的轮次。
+8. 至少两个会话能够同时运行，并在用户切换界面后继续执行。
+9. 会话能够重命名。
+10. 会话经确认后能够移入操作系统废纸篓或回收站。
+11. 设置表单能够读取、监听并安全更新三个已确认的环境字段，同时保留所有无关 JSON 配置。
+12. 日志和前端持久化状态中不出现密钥。
+13. 存在活动任务时关闭 App 会先请求确认，再终止所属子进程。
+14. 自动化单元测试和模拟 CLI 集成测试全部通过。
+15. macOS arm64 DMG 能够在 Apple Silicon 设备上安装并启动。
+16. Windows x64 安装程序能够在原生 Windows 上安装并启动。
 
-## 14. Implementation Constraints
+## 14. 实现约束
 
-- Preserve the user's existing Claude data and unrelated settings.
-- Never infer broad deletion targets from unresolved variables or partial session identifiers.
-- Do not expose filesystem or process primitives directly to the Vue webview.
-- Keep the bridge protocol small, versioned, and independent of raw SDK event shapes.
-- Treat Claude transcript structures as external data that may gain fields over time.
-- Do not broaden the MVP while implementing it. New feature requests require a separate design update.
+- 保留用户已有的 Claude 数据和所有无关设置。
+- 绝不能根据未解析变量或不完整的 session ID 推断大范围删除目标。
+- 不向 Vue WebView 直接暴露文件系统或进程原语。
+- Bridge 协议应保持小型、带版本号，并与 SDK 原始事件结构解耦。
+- 将 Claude transcript 结构视为可能随版本增加字段的外部数据。
+- 实现期间不得扩大 MVP 范围；新增功能需求必须单独更新设计。
 
-## 15. References
+## 15. 参考资料
 
-- [Claude Code CLI reference](https://code.claude.com/docs/en/cli-usage)
-- [Claude Agent SDK TypeScript reference](https://code.claude.com/docs/en/agent-sdk/typescript)
-- [Claude Agent SDK sessions](https://code.claude.com/docs/en/agent-sdk/sessions)
-- [Claude Code session management](https://code.claude.com/docs/en/sessions)
-- [Claude Code settings](https://code.claude.com/docs/en/settings)
-- [Claude Code environment variables](https://code.claude.com/docs/en/env-vars)
-- [Claude Code model configuration](https://code.claude.com/docs/en/model-config)
+- [Claude Code CLI 参考](https://code.claude.com/docs/en/cli-usage)
+- [Claude Agent SDK TypeScript 参考](https://code.claude.com/docs/en/agent-sdk/typescript)
+- [Claude Agent SDK 会话管理](https://code.claude.com/docs/en/agent-sdk/sessions)
+- [Claude Code 会话管理](https://code.claude.com/docs/en/sessions)
+- [Claude Code 设置](https://code.claude.com/docs/en/settings)
+- [Claude Code 环境变量](https://code.claude.com/docs/en/env-vars)
+- [Claude Code 模型配置](https://code.claude.com/docs/en/model-config)
