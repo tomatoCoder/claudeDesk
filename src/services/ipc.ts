@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { AppSettingsDto, AppSnapshot, CliDiagnosticDto, ProjectDto, RunAccepted, TaskDto, WorkspaceDiff } from '../domain/models'
+import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, RunAccepted, TaskDto } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
 
 export const isDesktop = () => '__TAURI_INTERNALS__' in window
@@ -11,7 +11,10 @@ export async function chooseProjectDirectory(): Promise<string | null> {
 }
 
 export const ipc = {
+  confirmAppExit: () => invoke<void>('confirm_app_exit'),
   snapshot: () => invoke<AppSnapshot>('get_snapshot'),
+  refreshSessions: () => invoke<AppSnapshot>('refresh_claude_sessions'),
+  sessionMessages: (taskId: string) => invoke<ClaudeSessionMessage[]>('get_claude_session_messages', { taskId }),
   addProject: (path: string) => invoke<ProjectDto>('add_project', { path }),
   removeProject: (projectId: string) => invoke<void>('remove_project', { projectId }),
   createTask: (projectId: string, title?: string) => invoke<TaskDto>('create_task', { projectId, title }),
@@ -20,12 +23,13 @@ export const ipc = {
   listEvents: (taskId: string) => invoke<TaskEvent[]>('list_task_events', { taskId, offset: 0, limit: 5000 }),
   sendTurn: (taskId: string, prompt: string) => invoke<RunAccepted>('send_turn', { taskId, prompt }),
   cancelTask: (taskId: string) => invoke<void>('cancel_task', { taskId }),
-  resolvePermission: (taskId: string, requestId: string, decision: string, updatedInput: unknown, rule?: string) =>
-    invoke<void>('resolve_permission', { taskId, requestId, decision, updatedInput, rule }),
-  workspaceDiff: (projectId: string) => invoke<WorkspaceDiff>('get_workspace_diff', { projectId }),
+  resolvePermission: (taskId: string, requestId: string, decision: string, updatedInput: unknown, permissionUpdate?: unknown) =>
+    invoke<void>('resolve_permission', { taskId, requestId, decision, updatedInput, permissionUpdate }),
   diagnoseClaude: () => invoke<CliDiagnosticDto>('diagnose_claude'),
   saveSettings: (settings: AppSettingsDto) => invoke<AppSettingsDto>('save_settings', { settings }),
-  rawLog: (taskId: string) => invoke<string>('read_raw_log', { taskId }),
+  loadClaudeSettings: () => invoke<ClaudeSettingsDto>('get_claude_settings'),
+  saveClaudeSettings: (version: string, values: ManagedClaudeSettings) =>
+    invoke<ClaudeSettingsDto>('save_claude_settings', { version, values }),
 }
 
 export function errorMessage(error: unknown): string {

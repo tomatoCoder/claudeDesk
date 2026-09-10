@@ -29,7 +29,7 @@ export type TaskEventData =
   | { kind: 'assistant_message'; messageId: string; markdown: string }
   | { kind: 'tool_started'; toolUseId: string; toolName: string; input: unknown }
   | { kind: 'tool_finished'; toolUseId: string; output: unknown; isError: boolean }
-  | { kind: 'permission_requested'; requestId: string; toolName: string; input: unknown; suggestions: string[] }
+  | { kind: 'permission_requested'; requestId: string; toolName: string; input: unknown; suggestions: unknown[] }
   | { kind: 'permission_resolved'; requestId: string; decision: PermissionDecisionKind }
   | { kind: 'question_requested'; requestId: string; questions: UserQuestion[] }
   | { kind: 'workspace_conflict'; projectId: string; activeTaskIds: string[] }

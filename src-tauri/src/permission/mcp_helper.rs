@@ -83,7 +83,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                     .map(|values| {
                         values
                             .iter()
-                            .filter_map(|value| value.as_str().map(str::to_string))
+                            .cloned()
                             .collect()
                     })
                     .unwrap_or_default();
@@ -110,9 +110,11 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                     },
                 };
                 let decision_json = match decision {
-                    PermissionDecision::AllowOnce { updated_input }
-                    | PermissionDecision::AllowTask { updated_input, .. } => {
+                    PermissionDecision::AllowOnce { updated_input } => {
                         serde_json::json!({ "behavior": "allow", "updatedInput": updated_input })
+                    }
+                    PermissionDecision::AllowTask { updated_input, permission_update } => {
+                        serde_json::json!({ "behavior": "allow", "updatedInput": updated_input, "updatedPermissions": [permission_update] })
                     }
                     PermissionDecision::Deny { message } => {
                         serde_json::json!({ "behavior": "deny", "message": message })

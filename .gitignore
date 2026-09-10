@@ -7,6 +7,8 @@ playwright-report/
 test-results/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/binaries/claude-agent-bridge-*
+artifacts/
 *.log
 *.db
 *.db-shm

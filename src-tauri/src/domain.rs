@@ -106,7 +106,7 @@ pub enum TaskEventPayload {
         request_id: String,
         tool_name: String,
         input: serde_json::Value,
-        suggestions: Vec<String>,
+        suggestions: Vec<serde_json::Value>,
     },
     PermissionResolved {
         request_id: String,

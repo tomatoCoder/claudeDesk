@@ -10,9 +10,11 @@ jobs:
       matrix:
         include:
           - os: macos-14
+            target: aarch64-apple-darwin
             bundle: app,dmg
             artifact: claude-desk-macos-arm64
           - os: windows-2022
+            target: x86_64-pc-windows-msvc
             bundle: nsis
             artifact: claude-desk-windows-x64
     runs-on: ${{ matrix.os }}
@@ -26,10 +28,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build installer
-        run: pnpm tauri build --bundles ${{ matrix.bundle }}
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

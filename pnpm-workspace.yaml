@@ -1,0 +1,16 @@
+packages:
+  - .
+  - bridge
+
+# Bridge 始终通过 pathToClaudeCodeExecutable 使用用户本机 CLI；不下载 SDK 的可选 CLI 包。
+ignoredOptionalDependencies:
+  - "@anthropic-ai/claude-agent-sdk-*"
+
+# 桌面构建常在离线环境运行；依赖安装由显式 pnpm install 步骤负责。
+verifyDepsBeforeRun: false
+
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/claude-agent-sdk@0.3.266'
+
+allowBuilds:
+  bun: true

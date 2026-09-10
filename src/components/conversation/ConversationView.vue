@@ -14,7 +14,7 @@ import InlineError from '../common/InlineError.vue'
 type RenderItem =
   | { type: 'message'; key: string; role: 'user' | 'assistant'; text: string; streaming?: boolean }
   | { type: 'tool'; key: string; name: string; input: unknown; output?: unknown; isError?: boolean; finished: boolean }
-  | { type: 'permission'; key: string; requestId: string; toolName: string; input: unknown; suggestions: string[] }
+  | { type: 'permission'; key: string; requestId: string; toolName: string; input: unknown; suggestions: unknown[] }
   | { type: 'question'; key: string; requestId: string; questions: Extract<TaskEvent, { kind: 'question_requested' }>['data']['questions'] }
   | { type: 'error'; key: string; message: string }
   | { type: 'conflict'; key: string; count: number }
@@ -29,21 +29,28 @@ const active = computed(() => ['starting', 'running', 'awaiting_permission', 'st
 const items = computed<RenderItem[]>(() => {
   const result: RenderItem[] = []
   const messages = new Map<string, Extract<RenderItem, { type: 'message' }>>()
+  const currentAssistantByRun = new Map<string, Extract<RenderItem, { type: 'message' }>>()
   const tools = new Map<string, Extract<RenderItem, { type: 'tool' }>>()
   const resolved = new Set(props.events.filter((event) => event.kind === 'permission_resolved').map((event) => event.data.requestId))
   for (const event of props.events) {
     switch (event.kind) {
       case 'user_message': result.push({ type: 'message', key: `${event.runId}:${event.sequence}`, role: 'user', text: event.data.text }); break
       case 'assistant_delta': {
-        let item = messages.get(event.data.messageId)
-        if (!item) { item = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: '', streaming: true }; messages.set(event.data.messageId, item); result.push(item) }
+        let item = messages.get(event.data.messageId) ?? currentAssistantByRun.get(event.runId)
+        if (!item || !item.streaming) {
+          item = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: '', streaming: true }
+          currentAssistantByRun.set(event.runId, item)
+          result.push(item)
+        }
+        messages.set(event.data.messageId, item)
         item.text += event.data.text
         break
       }
       case 'assistant_message': {
-        const item = messages.get(event.data.messageId)
-        if (item) { item.text = event.data.markdown; item.streaming = false }
+        const item = messages.get(event.data.messageId) ?? currentAssistantByRun.get(event.runId)
+        if (item) { item.text = event.data.markdown; item.streaming = false; messages.set(event.data.messageId, item) }
         else { const created: Extract<RenderItem, { type: 'message' }> = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: event.data.markdown }; messages.set(event.data.messageId, created); result.push(created) }
+        currentAssistantByRun.delete(event.runId)
         break
       }
       case 'tool_started': { const item: Extract<RenderItem, { type: 'tool' }> = { type: 'tool', key: `tool:${event.data.toolUseId}`, name: event.data.toolName, input: event.data.input, finished: false }; tools.set(event.data.toolUseId, item); result.push(item); break }
@@ -60,8 +67,8 @@ const items = computed<RenderItem[]>(() => {
   return result
 })
 
-async function resolve(requestId: string, value: { decision: 'allow_once' | 'allow_task' | 'deny'; updatedInput: unknown; rule?: string }) {
-  try { await ipc.resolvePermission(props.task.id, requestId, value.decision, value.updatedInput, value.rule) }
+async function resolve(requestId: string, value: { decision: 'allow_once' | 'allow_task' | 'deny'; updatedInput: unknown; permissionUpdate?: unknown }) {
+  try { await ipc.resolvePermission(props.task.id, requestId, value.decision, value.updatedInput, value.permissionUpdate) }
   catch (cause) { error.value = errorMessage(cause) }
 }
 
@@ -93,5 +100,6 @@ watch(() => props.events.length, async () => { await nextTick(); if (scroll.valu
 </template>
 
 <style scoped>
-.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; }.timeline { width: min(820px, calc(100% - 40px)); margin: 0 auto; padding: 18px 0 80px; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 40px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid rgba(214,158,46,.3); background: rgba(214,158,46,.07); color: #e5c277; }.event-error { border: 1px solid rgba(207,93,93,.3); background: rgba(207,93,93,.08); color: #e8a4a4; }.result { margin: 18px 40px; color: var(--text-muted); font-size: 11px; text-align: center; }
+.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid rgba(214,158,46,.3); background: rgba(214,158,46,.07); color: #e5c277; }.event-error { border: 1px solid rgba(207,93,93,.3); background: rgba(207,93,93,.08); color: #e8a4a4; }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
+@media (max-width: 720px) { .timeline { width: calc(100% - 28px); padding-top: 18px; } }
 </style>

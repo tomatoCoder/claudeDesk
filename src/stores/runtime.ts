@@ -2,6 +2,7 @@ import { reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { TaskEvent } from '../domain/events'
 import { ipc } from '../services/ipc'
+import { sessionMessagesToEvents } from '../services/sessionMessages'
 
 export const useRuntimeStore = defineStore('runtime', () => {
   const byTask = reactive<Record<string, TaskEvent[]>>({})
@@ -9,7 +10,14 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
   async function load(taskId: string) {
     loadingTaskId.value = taskId
-    try { byTask[taskId] = dedupe(await ipc.listEvents(taskId)) }
+    try {
+      const local = await ipc.listEvents(taskId)
+      if (local.length) byTask[taskId] = dedupe(local)
+      else {
+        try { byTask[taskId] = sessionMessagesToEvents(taskId, await ipc.sessionMessages(taskId)) }
+        catch { byTask[taskId] = [] }
+      }
+    }
     finally { if (loadingTaskId.value === taskId) loadingTaskId.value = null }
   }
 

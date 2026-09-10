@@ -5,7 +5,7 @@ import type { ProjectDto, TaskDto } from '../../domain/models'
 import TaskRow from './TaskRow.vue'
 
 const props = defineProps<{ project: ProjectDto; tasks: TaskDto[]; selectedProjectId: string | null; selectedTaskId: string | null }>()
-const emit = defineEmits<{ selectProject: []; selectTask: [id: string]; createTask: []; removeProject: []; removeTask: [id: string] }>()
+const emit = defineEmits<{ selectProject: []; selectTask: [id: string]; createTask: []; removeProject: []; renameTask: [id: string]; removeTask: [id: string] }>()
 const expanded = ref(true)
 const selected = computed(() => props.selectedProjectId === props.project.id)
 </script>
@@ -17,12 +17,12 @@ const selected = computed(() => props.selectedProjectId === props.project.id)
         <ChevronDown :size="14" :class="{ collapsed: !expanded }" @click.stop="expanded = !expanded" />
         <Folder :size="15" /><span>{{ project.name }}</span>
       </button>
-      <button class="mini" type="button" title="新建任务" @click="emit('createTask')"><Plus :size="14" /></button>
+      <button class="mini" type="button" title="新建会话" @click="emit('createTask')"><Plus :size="14" /></button>
       <button class="mini danger" type="button" title="移除项目" @click="emit('removeProject')"><Trash2 :size="13" /></button>
     </div>
     <div v-if="expanded" class="tasks">
-      <TaskRow v-for="task in tasks" :key="task.id" :task="task" :selected="selectedTaskId === task.id" @select="emit('selectTask', task.id)" @remove="emit('removeTask', task.id)" />
-      <button v-if="!tasks.length" class="first-task" type="button" @click="emit('createTask')">+ 新任务</button>
+      <TaskRow v-for="task in tasks" :key="task.id" :task="task" :selected="selectedTaskId === task.id" @select="emit('selectTask', task.id)" @rename="emit('renameTask', task.id)" @remove="emit('removeTask', task.id)" />
+      <button v-if="!tasks.length" class="first-task" type="button" @click="emit('createTask')">+ 新会话</button>
     </div>
   </section>
 </template>

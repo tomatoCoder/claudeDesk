@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.claudedesk.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm bridge:build:dev && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm bridge:sidecar && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -32,10 +32,14 @@
     "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "A desktop client for your installed Claude Code CLI",
-    "longDescription": "Run local Claude Code tasks with a native project sidebar, streaming transcript, permissions, and workspace diff.",
+    "longDescription": "A local desktop client for the Claude Code CLI with projects, native sessions, streaming conversations, approvals, and managed model settings.",
+    "externalBin": [
+      "binaries/claude-agent-bridge"
+    ],
     "macOS": {
       "minimumSystemVersion": "13.0",
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "entitlements": "./Entitlements.plist"
     },
     "windows": {
       "nsis": {

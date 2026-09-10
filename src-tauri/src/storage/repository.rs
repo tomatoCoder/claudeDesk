@@ -103,6 +103,44 @@ impl Storage {
         self.get_task(&id)
     }
 
+    pub fn upsert_claude_session(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        title: &str,
+        updated_at: &str,
+    ) -> Result<TaskDto, AppError> {
+        self.get_project(project_id)?;
+        uuid::Uuid::parse_str(session_id).map_err(|_| {
+            AppError::new("invalid_session_id", "Claude 会话标识无效", false)
+        })?;
+        let title = title.trim();
+        let title = if title.is_empty() { "未命名会话" } else { title };
+        let connection = self.connection.lock();
+        if let Some(id) = connection
+            .query_row(
+                "SELECT id FROM tasks WHERE claude_session_id=?1 LIMIT 1",
+                [session_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+        {
+            connection.execute(
+                "UPDATE tasks SET project_id=?1,title=?2,updated_at=?3 WHERE id=?4",
+                params![project_id, title, updated_at, id],
+            )?;
+            drop(connection);
+            return self.get_task(&id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        connection.execute(
+            "INSERT INTO tasks(id,project_id,title,claude_session_id,status,created_at,updated_at) VALUES(?1,?2,?3,?4,'idle',?5,?5)",
+            params![id, project_id, title, session_id, updated_at],
+        )?;
+        drop(connection);
+        self.get_task(&id)
+    }
+
     pub fn get_task(&self, id: &str) -> Result<TaskDto, AppError> {
         self.connection.lock().query_row(
             "SELECT id,project_id,title,claude_session_id,status,created_at,updated_at FROM tasks WHERE id=?1", [id], task_from_row,

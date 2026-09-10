@@ -23,6 +23,30 @@ export interface AppSettingsDto {
   sidebarWidth: number
 }
 
+export interface ManagedClaudeSettings {
+  authToken: string
+  baseUrl: string
+  model: string
+}
+
+export interface ClaudeSettingsDto {
+  values: ManagedClaudeSettings
+  version: string
+  path: string
+}
+
+export interface SaveClaudeSettingsInput {
+  version: string
+  values: ManagedClaudeSettings
+}
+
+export interface ClaudeSessionMessage {
+  type: 'user' | 'assistant' | 'system'
+  uuid: string
+  sessionId: string
+  message: unknown
+}
+
 export type CliDiagnosticStatus = 'ready' | 'not_found' | 'too_old' | 'probe_failed' | 'not_authenticated'
 
 export interface CliDiagnosticDto {

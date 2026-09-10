@@ -34,14 +34,14 @@ impl PermissionHub {
         &self,
         request: PermissionRequest,
     ) -> Result<PermissionDecision, AppError> {
-        if let Some(rule) = self
+        if let Some(permission_update) = self
             .grants
             .lock()
             .matches_any(&request.task_id, &request.suggestions)
         {
             return Ok(PermissionDecision::AllowTask {
                 updated_input: request.input,
-                rule,
+                permission_update,
             });
         }
         let (sender, receiver) = oneshot::channel();
@@ -51,14 +51,15 @@ impl PermissionHub {
         );
         match tokio::time::timeout(self.timeout, receiver).await {
             Ok(Ok(decision)) => {
-                if let PermissionDecision::AllowTask { rule, .. } = &decision {
-                    if request
-                        .suggestions
-                        .iter()
-                        .any(|suggestion| suggestion == rule)
-                        && !rule.trim().is_empty()
-                    {
-                        self.grants.lock().allow(&request.task_id, rule);
+                if let PermissionDecision::AllowTask {
+                    permission_update,
+                    ..
+                } = &decision
+                {
+                    if request.suggestions.contains(permission_update) {
+                        self.grants
+                            .lock()
+                            .allow(&request.task_id, permission_update);
                     }
                 }
                 Ok(decision)

@@ -18,18 +18,29 @@ pub fn create_task(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn rename_task(
+pub async fn rename_task(
     task_id: String,
     title: String,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<TaskDto, AppError> {
     super::validate_id(&task_id)?;
+    let title = title.trim().to_string();
+    crate::commands::sessions::rename_native_session(&app, state.inner(), &task_id, &title).await?;
     state.storage.rename_task(&task_id, &title)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn delete_task(task_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     super::validate_id(&task_id)?;
+    let task = state.storage.get_task(&task_id)?;
+    if task.status.is_active() {
+        return Err(AppError::new("task_active", "请先停止正在运行的会话", true));
+    }
+    if let Some(session_id) = task.claude_session_id.as_deref() {
+        let home = dirs::home_dir().ok_or_else(|| AppError::new("home_not_found", "无法确定当前用户目录", false))?;
+        crate::sessions::SessionDeletePlan::resolve(&home.join(".claude"), session_id)?.move_to_trash()?;
+    }
     state.storage.delete_task(&task_id)
 }
 

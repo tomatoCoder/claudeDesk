@@ -1,8 +1,10 @@
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    time::Duration,
 };
+use wait_timeout::ChildExt;
 
 use super::version::{parse_version, MINIMUM_CLAUDE_VERSION};
 use crate::{
@@ -17,6 +19,9 @@ pub fn candidates(custom: Option<&str>) -> Vec<PathBuf> {
     }
     if let Ok(path) = which::which("claude") {
         result.push(path);
+    }
+    if let Some(home) = dirs::home_dir() {
+        result.extend(user_install_candidates(&home));
     }
     #[cfg(target_os = "macos")]
     result.extend([
@@ -34,6 +39,36 @@ pub fn candidates(custom: Option<&str>) -> Vec<PathBuf> {
         .collect()
 }
 
+fn user_install_candidates(home: &Path) -> Vec<PathBuf> {
+    let mut result = vec![
+        home.join(".local").join("bin").join("claude"),
+        home.join(".claude").join("local").join("claude"),
+    ];
+    #[cfg(windows)]
+    result.push(home.join(".local").join("bin").join("claude.exe"));
+
+    let node_versions = home.join(".nvm").join("versions").join("node");
+    let mut versions = std::fs::read_dir(node_versions)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .collect::<Vec<_>>();
+    versions.sort_by(|left, right| {
+        let parse = |entry: &std::fs::DirEntry| {
+            semver::Version::parse(entry.file_name().to_string_lossy().trim_start_matches('v'))
+                .unwrap_or_else(|_| semver::Version::new(0, 0, 0))
+        };
+        parse(right).cmp(&parse(left))
+    });
+    result.extend(
+        versions
+            .into_iter()
+            .map(|entry| entry.path().join("bin").join("claude")),
+    );
+    result
+}
+
 pub fn diagnose(custom: Option<&str>) -> Result<CliDiagnosticDto, AppError> {
     let candidates = candidates(custom);
     let Some(path) = candidates.into_iter().find(|path| is_executable(path)) else {
@@ -45,9 +80,12 @@ pub fn diagnose(custom: Option<&str>) -> Result<CliDiagnosticDto, AppError> {
         });
     };
 
-    let output = Command::new(&path)
+    let mut child = Command::new(&path)
         .arg("--version")
-        .output()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| {
             AppError::new(
                 "cli_probe_failed",
@@ -55,7 +93,13 @@ pub fn diagnose(custom: Option<&str>) -> Result<CliDiagnosticDto, AppError> {
                 true,
             )
         })?;
-    if !output.status.success() {
+    let status = child.wait_timeout(Duration::from_secs(3))?.ok_or_else(|| {
+        let _ = child.kill();
+        let _ = child.wait();
+        AppError::new("cli_probe_timeout", "Claude Code 版本检测超时", true)
+    })?;
+    let output = child.wait_with_output()?;
+    if !status.success() {
         return Ok(CliDiagnosticDto {
             status: CliDiagnosticStatus::ProbeFailed,
             path: Some(path.to_string_lossy().into()),
@@ -74,32 +118,33 @@ pub fn diagnose(custom: Option<&str>) -> Result<CliDiagnosticDto, AppError> {
         });
     }
 
-    let auth = Command::new(&path)
-        .args(["auth", "status"])
-        .output()
-        .map_err(|error| {
-            AppError::new(
-                "cli_probe_failed",
-                format!("Claude 登录状态检查失败：{error}"),
-                true,
-            )
-        })?;
-    if !auth.status.success() {
-        return Ok(CliDiagnosticDto {
-            status: CliDiagnosticStatus::NotAuthenticated,
-            path: Some(path.to_string_lossy().into()),
-            version: Some(version.to_string()),
-            message: "Claude Code 尚未登录，请在终端运行 claude 并完成登录".into(),
-        });
-    }
     Ok(CliDiagnosticDto {
         status: CliDiagnosticStatus::Ready,
         path: Some(path.to_string_lossy().into()),
         version: Some(version.to_string()),
-        message: "Claude Code 已就绪".into(),
+        message: "Claude Code 可执行文件已就绪".into(),
     })
 }
 
 fn is_executable(path: &Path) -> bool {
     path.is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::user_install_candidates;
+
+    #[test]
+    fn discovers_claude_installed_inside_an_nvm_node_version() {
+        let home = tempfile::tempdir().unwrap();
+        let expected = home
+            .path()
+            .join(".nvm/versions/node/v24.14.0/bin/claude");
+        std::fs::create_dir_all(expected.parent().unwrap()).unwrap();
+        std::fs::write(&expected, "fixture").unwrap();
+
+        let candidates = user_install_candidates(home.path());
+
+        assert!(candidates.contains(&expected));
+    }
 }

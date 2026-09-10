@@ -12,7 +12,7 @@ pub enum PermissionDecision {
     },
     AllowTask {
         updated_input: serde_json::Value,
-        rule: String,
+        permission_update: serde_json::Value,
     },
     Deny {
         message: String,
@@ -25,7 +25,7 @@ pub struct PermissionRequest {
     pub request_id: String,
     pub tool_name: String,
     pub input: serde_json::Value,
-    pub suggestions: Vec<String>,
+    pub suggestions: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -40,7 +40,7 @@ pub enum BridgeFrame {
         tool_name: String,
         input: serde_json::Value,
         #[serde(default)]
-        suggestions: Vec<String>,
+        suggestions: Vec<serde_json::Value>,
     },
     Decision {
         request_id: String,

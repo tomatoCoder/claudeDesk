@@ -7,7 +7,7 @@ pub fn resolve_permission(
     request_id: String,
     decision: String,
     updated_input: serde_json::Value,
-    rule: Option<String>,
+    permission_update: Option<serde_json::Value>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     super::validate_id(&task_id)?;
@@ -15,8 +15,8 @@ pub fn resolve_permission(
     let decision = match decision.as_str() {
         "allow_once" => PermissionDecision::AllowOnce { updated_input },
         "allow_task" => {
-            let rule = rule
-                .filter(|value| !value.trim().is_empty())
+            let permission_update = permission_update
+                .filter(|value| !value.is_null())
                 .ok_or_else(|| {
                     AppError::new(
                         "missing_permission_rule",
@@ -26,7 +26,7 @@ pub fn resolve_permission(
                 })?;
             PermissionDecision::AllowTask {
                 updated_input,
-                rule,
+                permission_update,
             }
         }
         "deny" => PermissionDecision::Deny {

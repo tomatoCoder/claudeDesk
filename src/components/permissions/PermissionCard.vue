@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import { ShieldAlert } from 'lucide-vue-next'
 
-const props = defineProps<{ toolName: string; input: unknown; suggestions: string[] }>()
-const emit = defineEmits<{ resolve: [value: { decision: 'allow_once' | 'allow_task' | 'deny'; updatedInput: unknown; rule?: string }] }>()
+const props = defineProps<{ toolName: string; input: unknown; suggestions: unknown[] }>()
+const emit = defineEmits<{ resolve: [value: { decision: 'allow_once' | 'allow_task' | 'deny'; updatedInput: unknown; permissionUpdate?: unknown }] }>()
 const inputText = computed(() => JSON.stringify(props.input, null, 2))
-const suggestedRule = computed(() => props.suggestions.find((rule) => rule.trim().length > 0))
+const suggestedUpdate = computed(() => props.suggestions.find((update) => update !== null && update !== undefined))
+const suggestedTitle = computed(() => suggestedUpdate.value ? JSON.stringify(suggestedUpdate.value) : '')
 </script>
 
 <template>
@@ -14,7 +15,7 @@ const suggestedRule = computed(() => props.suggestions.find((rule) => rule.trim(
     <pre>{{ inputText }}</pre>
     <footer>
       <button class="danger-button" type="button" data-action="deny" @click="emit('resolve', { decision: 'deny', updatedInput: input })">拒绝</button>
-      <button v-if="suggestedRule" class="secondary-button" type="button" data-action="allow-task" :title="suggestedRule" @click="emit('resolve', { decision: 'allow_task', updatedInput: input, rule: suggestedRule })">本任务内允许</button>
+      <button v-if="suggestedUpdate" class="secondary-button" type="button" data-action="allow-task" :title="suggestedTitle" @click="emit('resolve', { decision: 'allow_task', updatedInput: input, permissionUpdate: suggestedUpdate })">本会话内允许</button>
       <button class="primary-button" type="button" data-action="allow-once" @click="emit('resolve', { decision: 'allow_once', updatedInput: input })">允许一次</button>
     </footer>
   </section>

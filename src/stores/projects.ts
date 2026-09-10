@@ -16,7 +16,10 @@ export const useProjectsStore = defineStore('projects', () => {
   const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null)
 
   async function hydrate() {
-    const snapshot = await ipc.snapshot()
+    let snapshot = await ipc.snapshot()
+    if (snapshot.cli.status === 'ready') {
+      try { snapshot = await ipc.refreshSessions() } catch { /* 手动项目仍可继续使用 */ }
+    }
     projects.value = snapshot.projects
     tasks.value = snapshot.tasks
     settings.value = snapshot.settings
@@ -59,6 +62,12 @@ export const useProjectsStore = defineStore('projects', () => {
     return task
   }
 
+  async function renameTask(taskId: string, title: string) {
+    const updated = await ipc.renameTask(taskId, title)
+    const index = tasks.value.findIndex((task) => task.id === taskId)
+    if (index >= 0) tasks.value.splice(index, 1, updated)
+  }
+
   async function removeProject(projectId: string) {
     await ipc.removeProject(projectId)
     projects.value = projects.value.filter((project) => project.id !== projectId)
@@ -78,5 +87,5 @@ export const useProjectsStore = defineStore('projects', () => {
     await refreshDiagnostic()
   }
 
-  return { projects, tasks, settings, cli, selectedProjectId, selectedTaskId, selectedProject, selectedTask, hydrate, selectProject, selectTask, addProject, createTask, removeProject, updateTaskStatus, refreshDiagnostic, persistSettings }
+  return { projects, tasks, settings, cli, selectedProjectId, selectedTaskId, selectedProject, selectedTask, hydrate, selectProject, selectTask, addProject, createTask, renameTask, removeProject, updateTaskStatus, refreshDiagnostic, persistSettings }
 })
