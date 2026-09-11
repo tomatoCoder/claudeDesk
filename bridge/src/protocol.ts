@@ -31,6 +31,11 @@ export interface RunStartRequest {
 
 export type BridgeRequest = HandshakeRequest | CatalogRequest | RunStartRequest
 
+export type RunControl =
+  | { v: 1; type: 'run.stop'; runId: string }
+  | { v: 1; type: 'run.adjust'; runId: string; adjustmentId: string; text: string }
+  | { v: 1; type: 'permission.resolve'; runId: string; permissionId: string; behavior: 'allow' | 'deny'; updatedInput?: unknown; updatedPermissions?: unknown[]; message?: string }
+
 export interface BridgeEvent {
   v: typeof PROTOCOL_VERSION
   type: string
@@ -50,6 +55,23 @@ export function parseBridgeRequest(line: string): BridgeRequest {
     throw new Error('Claude 可执行文件必须使用绝对路径')
   }
   return value as unknown as BridgeRequest
+}
+
+export function parseRunControl(line: string): RunControl {
+  const value = JSON.parse(line) as Record<string, unknown>
+  if (value.v !== PROTOCOL_VERSION || typeof value.type !== 'string' || typeof value.runId !== 'string') {
+    throw new Error('运行控制消息格式无效')
+  }
+  if (value.type === 'run.adjust') {
+    if (typeof value.adjustmentId !== 'string' || !value.adjustmentId) throw new Error('调整消息缺少 adjustmentId')
+    if (typeof value.text !== 'string' || !value.text.trim()) throw new Error('调整消息不能为空')
+    if (value.text.length > 200_000) throw new Error('调整消息长度超过 200,000 个字符')
+  }
+  if (value.type === 'permission.resolve' && (typeof value.permissionId !== 'string' || !value.permissionId)) {
+    throw new Error('权限控制消息缺少 permissionId')
+  }
+  if (!['run.stop', 'run.adjust', 'permission.resolve'].includes(value.type)) throw new Error('未知运行控制消息')
+  return value as unknown as RunControl
 }
 
 export function serializeBridgeEvent(event: BridgeEvent): string {
