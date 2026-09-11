@@ -114,11 +114,7 @@ async function removeTask(taskId: string) {
   } catch (cause) { error.value = errorMessage(cause) }
 }
 
-async function renameTask(taskId: string) {
-  const task = projects.tasks.find((item) => item.id === taskId)
-  if (!task) return
-  const title = window.prompt(t('renameTaskPrompt'), task.title)?.trim()
-  if (!title || title === task.title) return
+async function renameTask(taskId: string, title: string) {
   try { await projects.renameTask(taskId, title) }
   catch (cause) { error.value = errorMessage(cause) }
 }

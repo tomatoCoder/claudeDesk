@@ -82,16 +82,46 @@ fn run_open_command(mut command: Command, label: &str) -> Result<(), AppError> {
 fn open_project_path(path: &Path, open_with: &ProjectOpenWith) -> Result<(), AppError> {
     let (application, label) = match open_with {
         ProjectOpenWith::Default => (None, "系统默认应用"),
-        ProjectOpenWith::Qoder => (Some("Qoder"), "Qoder"),
-        ProjectOpenWith::Vscode => (Some("Visual Studio Code"), "VS Code"),
-        ProjectOpenWith::IntellijIdea => (Some("IntelliJ IDEA"), "IntelliJ IDEA"),
+        ProjectOpenWith::Qoder => (
+            Some(
+                find_macos_application(&["Qoder IDE.app", "Qoder.app"])
+                    .unwrap_or_else(|| PathBuf::from("Qoder IDE")),
+            ),
+            "Qoder",
+        ),
+        ProjectOpenWith::Vscode => (
+            Some(
+                find_macos_application(&["Visual Studio Code.app", "Visual Studio Code 2.app"])
+                    .unwrap_or_else(|| PathBuf::from("Visual Studio Code")),
+            ),
+            "VS Code",
+        ),
+        ProjectOpenWith::IntellijIdea => (
+            Some(
+                find_macos_application(&["IntelliJ IDEA.app", "IntelliJ IDEA CE.app"])
+                    .unwrap_or_else(|| PathBuf::from("IntelliJ IDEA")),
+            ),
+            "IntelliJ IDEA",
+        ),
     };
     let mut command = Command::new("open");
     if let Some(application) = application {
-        command.args(["-a", application]);
+        command.arg("-a").arg(application);
     }
     command.arg(path);
     run_open_command(command, label)
+}
+
+#[cfg(target_os = "macos")]
+fn find_macos_application(names: &[&str]) -> Option<PathBuf> {
+    let mut roots = vec![PathBuf::from("/Applications")];
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join("Applications"));
+    }
+    roots
+        .iter()
+        .flat_map(|root| names.iter().map(move |name| root.join(name)))
+        .find(|candidate| candidate.is_dir())
 }
 
 #[cfg(target_os = "windows")]

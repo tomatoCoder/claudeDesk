@@ -6,7 +6,7 @@ import { useI18n } from '../../services/i18n'
 import TaskRow from './TaskRow.vue'
 
 const props = defineProps<{ project: ProjectDto; tasks: TaskDto[]; selectedProjectId: string | null; selectedTaskId: string | null }>()
-const emit = defineEmits<{ selectProject: []; selectTask: [id: string]; createTask: []; openProject: []; removeProject: []; renameTask: [id: string]; removeTask: [id: string] }>()
+const emit = defineEmits<{ selectProject: []; selectTask: [id: string]; createTask: []; openProject: []; removeProject: []; renameTask: [id: string, title: string]; removeTask: [id: string] }>()
 const expanded = ref(true)
 const selected = computed(() => props.selectedProjectId === props.project.id)
 const { t } = useI18n()
@@ -24,7 +24,7 @@ const { t } = useI18n()
       <button class="mini danger" type="button" :title="t('removeProject')" @click="emit('removeProject')"><Trash2 :size="13" /></button>
     </div>
     <div v-if="expanded" class="tasks">
-      <TaskRow v-for="task in tasks" :key="task.id" :task="task" :selected="selectedTaskId === task.id" @select="emit('selectTask', task.id)" @rename="emit('renameTask', task.id)" @remove="emit('removeTask', task.id)" />
+      <TaskRow v-for="task in tasks" :key="task.id" :task="task" :selected="selectedTaskId === task.id" @select="emit('selectTask', task.id)" @rename="emit('renameTask', task.id, $event)" @remove="emit('removeTask', task.id)" />
       <button v-if="!tasks.length" class="first-task" type="button" @click="emit('createTask')">+ {{ t('newSession') }}</button>
     </div>
   </section>

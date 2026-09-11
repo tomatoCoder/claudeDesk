@@ -6,15 +6,19 @@ import { useI18n } from '../../services/i18n'
 import ProjectGroup from './ProjectGroup.vue'
 
 defineProps<{ projects: ProjectDto[]; tasks: TaskDto[]; selectedProjectId: string | null; selectedTaskId: string | null; cli: CliDiagnosticDto }>()
-const emit = defineEmits<{ addProject: []; selectProject: [id: string]; selectTask: [id: string]; createTask: [projectId: string]; openProject: [id: string]; removeProject: [id: string]; renameTask: [id: string]; removeTask: [id: string]; settings: [] }>()
+const emit = defineEmits<{ addProject: []; selectProject: [id: string]; selectTask: [id: string]; createTask: [projectId: string]; openProject: [id: string]; removeProject: [id: string]; renameTask: [id: string, title: string]; removeTask: [id: string]; settings: [] }>()
 const { t } = useI18n()
+
+function renameTask(id: string, title: string) {
+  emit('renameTask', id, title)
+}
 </script>
 
 <template>
   <aside class="app-sidebar">
     <header class="brand"><img class="brand-logo" :src="appLogo" alt="" /><span>Claude Desk</span><button class="icon-button add" type="button" :title="t('addProject')" @click="emit('addProject')"><Plus :size="18" /></button></header>
     <nav :aria-label="t('projectNavigation')">
-      <ProjectGroup v-for="project in projects" :key="project.id" :project="project" :tasks="tasks.filter((task) => task.projectId === project.id)" :selected-project-id="selectedProjectId" :selected-task-id="selectedTaskId" @select-project="emit('selectProject', project.id)" @select-task="emit('selectTask', $event)" @create-task="emit('createTask', project.id)" @open-project="emit('openProject', project.id)" @remove-project="emit('removeProject', project.id)" @rename-task="emit('renameTask', $event)" @remove-task="emit('removeTask', $event)" />
+      <ProjectGroup v-for="project in projects" :key="project.id" :project="project" :tasks="tasks.filter((task) => task.projectId === project.id)" :selected-project-id="selectedProjectId" :selected-task-id="selectedTaskId" @select-project="emit('selectProject', project.id)" @select-task="emit('selectTask', $event)" @create-task="emit('createTask', project.id)" @open-project="emit('openProject', project.id)" @remove-project="emit('removeProject', project.id)" @rename-task="renameTask" @remove-task="emit('removeTask', $event)" />
       <button v-if="!projects.length" class="add-project-empty" type="button" @click="emit('addProject')"><Plus :size="16" /> {{ t('addLocalProject') }}</button>
     </nav>
     <footer>
