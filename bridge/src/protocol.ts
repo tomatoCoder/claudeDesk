@@ -70,6 +70,9 @@ export function parseRunControl(line: string): RunControl {
   if (value.type === 'permission.resolve' && (typeof value.permissionId !== 'string' || !value.permissionId)) {
     throw new Error('权限控制消息缺少 permissionId')
   }
+  if (value.type === 'permission.resolve' && value.behavior !== 'allow' && value.behavior !== 'deny') {
+    throw new Error('权限控制消息 behavior 必须为 allow 或 deny')
+  }
   if (!['run.stop', 'run.adjust', 'permission.resolve'].includes(value.type)) throw new Error('未知运行控制消息')
   return value as unknown as RunControl
 }

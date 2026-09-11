@@ -38,4 +38,16 @@ describe('Bridge 协议', () => {
       v: 1, type: 'run.adjust', runId: 'run-1', adjustmentId: 'a1', text: '   ',
     }))).toThrow(/不能为空/)
   })
+
+  it('拒绝缺少行为的权限控制消息', () => {
+    expect(() => parseRunControl(JSON.stringify({
+      v: 1, type: 'permission.resolve', runId: 'run-1', permissionId: 'permission-1',
+    }))).toThrow(/behavior/)
+  })
+
+  it('拒绝未知行为的权限控制消息', () => {
+    expect(() => parseRunControl(JSON.stringify({
+      v: 1, type: 'permission.resolve', runId: 'run-1', permissionId: 'permission-1', behavior: 'defer',
+    }))).toThrow(/behavior/)
+  })
 })
