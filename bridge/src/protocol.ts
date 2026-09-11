@@ -17,6 +17,14 @@ export interface CatalogRequest {
   title?: string
 }
 
+export interface CommandsRequest {
+  v: typeof PROTOCOL_VERSION
+  type: 'commands.list'
+  requestId: string
+  claudePath: string
+  cwd: string
+}
+
 export interface RunStartRequest {
   v: typeof PROTOCOL_VERSION
   type: 'run.start'
@@ -27,9 +35,11 @@ export interface RunStartRequest {
   prompt: string
   sessionId?: string
   model?: string
+  modelOverride?: string
+  permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk'
 }
 
-export type BridgeRequest = HandshakeRequest | CatalogRequest | RunStartRequest
+export type BridgeRequest = HandshakeRequest | CatalogRequest | CommandsRequest | RunStartRequest
 
 export type RunControl =
   | { v: 1; type: 'run.stop'; runId: string }
@@ -53,6 +63,9 @@ export function parseBridgeRequest(line: string): BridgeRequest {
   }
   if (typeof value.claudePath !== 'string' || !isAbsolutePath(value.claudePath)) {
     throw new Error('Claude 可执行文件必须使用绝对路径')
+  }
+  if (value.type === 'commands.list' && (typeof value.cwd !== 'string' || !isAbsolutePath(value.cwd))) {
+    throw new Error('命令目录工作目录必须使用绝对路径')
   }
   return value as unknown as BridgeRequest
 }

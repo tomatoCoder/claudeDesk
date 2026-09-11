@@ -11,7 +11,8 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import { buildQueryOptions, normalizeSdkMessage } from './agent-adapter.js'
 import { normalizeSession, normalizeSessionMessage } from './catalog.js'
-import { parseBridgeRequest, parseRunControl, serializeBridgeEvent, type BridgeEvent, type BridgeRequest, type RunStartRequest } from './protocol.js'
+import { discoverCommandCatalog } from './commands.js'
+import { parseBridgeRequest, parseRunControl, serializeBridgeEvent, type BridgeEvent, type BridgeRequest, type CommandsRequest, type RunStartRequest } from './protocol.js'
 import { applyRunControl, RunInput } from './run-input.js'
 
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
@@ -38,8 +39,18 @@ async function start() {
     finishOneShot()
     return
   }
+  if (request.type === 'commands.list') {
+    await handleCommands(request)
+    finishOneShot()
+    return
+  }
   if (request.type !== 'run.start') throw new Error(`不支持的 Bridge 请求：${request.type}`)
   await handleRun(request as RunStartRequest)
+}
+
+async function handleCommands(request: CommandsRequest) {
+  const catalog = await discoverCommandCatalog({ claudePath: request.claudePath, cwd: request.cwd })
+  write({ v: 1, type: 'commands.result', requestId: request.requestId, ...catalog })
 }
 
 async function handleCatalog(request: Extract<BridgeRequest, { type: `catalog.${string}` }>) {

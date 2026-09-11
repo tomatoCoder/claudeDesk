@@ -50,4 +50,22 @@ describe('Bridge 协议', () => {
       v: 1, type: 'permission.resolve', runId: 'run-1', permissionId: 'permission-1', behavior: 'defer',
     }))).toThrow(/behavior/)
   })
+
+  it('命令目录请求必须带绝对项目路径', () => {
+    expect(() => parseBridgeRequest(JSON.stringify({
+      v: 1,
+      type: 'commands.list',
+      requestId: 'r1',
+      claudePath: '/usr/local/bin/claude',
+      cwd: 'relative/project',
+    }))).toThrow(/工作目录.*绝对路径/)
+
+    expect(parseBridgeRequest(JSON.stringify({
+      v: 1,
+      type: 'commands.list',
+      requestId: 'r2',
+      claudePath: '/usr/local/bin/claude',
+      cwd: '/workspace',
+    }))).toMatchObject({ type: 'commands.list', cwd: '/workspace' })
+  })
 })

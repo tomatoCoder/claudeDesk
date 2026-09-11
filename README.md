@@ -1,5 +1,4 @@
 # Claude Desk
-
 Claude Desk 是一个供个人或团队内部安装使用的 Claude Code 桌面客户端。它采用 Tauri 2、Vue 3、TypeScript、Rust 和 Claude Agent SDK 构建，界面使用 Claude Code 风格的近黑、暖白与橙色主题。
 
 这个 MVP 只完成一个最小闭环：发现本机 Claude CLI，按“项目 → 会话”浏览本地历史，创建或恢复会话，流式对话并处理工具授权，以及同步三项用户级模型配置。

@@ -1,10 +1,12 @@
-import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import type { Options, PermissionMode } from '@anthropic-ai/claude-agent-sdk'
 
 export interface QueryContext {
   claudePath: string
   cwd: string
   sessionId?: string
   model?: string
+  modelOverride?: string
+  permissionMode?: PermissionMode
 }
 
 export type NormalizedAgentEvent =
@@ -15,17 +17,20 @@ export type NormalizedAgentEvent =
   | { type: 'tool.finished'; toolUseId: string; output: unknown; isError: boolean }
   | { type: 'run.result'; sessionId: string; costUsd: number | null; turns: number | null; subtype?: string }
   | { type: 'run.retry'; attempt: number; message: string }
+  | { type: 'local_command_output'; content: string }
+  | { type: 'commands.changed'; commands: Array<{ name: string; description: string; argumentHint: string; aliases: string[] }> }
 
 export function buildQueryOptions(context: QueryContext): Options {
   const options: Options = {
     cwd: context.cwd,
     pathToClaudeCodeExecutable: context.claudePath,
     includePartialMessages: true,
-    permissionMode: 'default',
+    permissionMode: context.permissionMode ?? 'default',
     settingSources: ['user', 'project', 'local'],
   }
   if (context.sessionId) options.resume = context.sessionId
-  else if (context.model?.trim()) options.model = context.model.trim()
+  if (context.modelOverride?.trim()) options.model = context.modelOverride.trim()
+  else if (!context.sessionId && context.model?.trim()) options.model = context.model.trim()
   return options
 }
 
@@ -38,6 +43,26 @@ export function normalizeSdkMessage(message: unknown): NormalizedAgentEvent[] {
   }
   if (type === 'system' && message.subtype === 'api_retry') {
     return [{ type: 'run.retry', attempt: asNumber(message.attempt) ?? 0, message: errorText(message.error) }]
+  }
+  if (type === 'system' && message.subtype === 'local_command_output') {
+    const content = asString(message.content)
+    return content ? [{ type: 'local_command_output', content }] : []
+  }
+  if (type === 'system' && message.subtype === 'commands_changed' && Array.isArray(message.commands)) {
+    return [{
+      type: 'commands.changed',
+      commands: message.commands.flatMap((command) => {
+        if (!isRecord(command)) return []
+        const name = asString(command.name).trim()
+        if (!name) return []
+        return [{
+          name,
+          description: asString(command.description),
+          argumentHint: asString(command.argumentHint),
+          aliases: Array.isArray(command.aliases) ? command.aliases.filter((alias): alias is string => typeof alias === 'string') : [],
+        }]
+      }),
+    }]
   }
   if (type === 'stream_event' && isRecord(message.event)) {
     const event = message.event

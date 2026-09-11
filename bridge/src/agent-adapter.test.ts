@@ -27,4 +27,26 @@ describe('Agent SDK 适配器', () => {
       type: 'assistant', uuid: 'm2', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/tmp/a' } }] },
     })).toEqual([{ type: 'tool.started', toolUseId: 't1', toolName: 'Read', input: { file_path: '/tmp/a' } }])
   })
+
+  it('把 CLI 本地命令输出转换为可展示事件', () => {
+    expect(normalizeSdkMessage({
+      type: 'system', subtype: 'local_command_output', content: 'Available commands', uuid: 'm3', session_id: 's1',
+    })).toEqual([{ type: 'local_command_output', content: 'Available commands' }])
+  })
+
+  it('把动态命令变化转换为完整替换目录', () => {
+    expect(normalizeSdkMessage({
+      type: 'system', subtype: 'commands_changed', uuid: 'm4', session_id: 's1',
+      commands: [{ name: 'review', description: 'Review code', argumentHint: '<path>', aliases: ['rv'] }],
+    })).toEqual([{
+      type: 'commands.changed',
+      commands: [{ name: 'review', description: 'Review code', argumentHint: '<path>', aliases: ['rv'] }],
+    }])
+  })
+
+  it('显式选择模型和权限模式时会应用到恢复会话', () => {
+    expect(buildQueryOptions({
+      claudePath: '/usr/local/bin/claude', cwd: '/workspace', sessionId: 'session-1', modelOverride: 'sonnet', permissionMode: 'plan',
+    })).toMatchObject({ resume: 'session-1', model: 'sonnet', permissionMode: 'plan' })
+  })
 })
