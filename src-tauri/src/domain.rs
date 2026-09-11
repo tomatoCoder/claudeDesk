@@ -215,6 +215,40 @@ pub struct TaskDto {
 pub struct AppSettingsDto {
     pub claude_path: Option<String>,
     pub sidebar_width: u16,
+    #[serde(default)]
+    pub theme: AppTheme,
+    #[serde(default)]
+    pub language: AppLanguage,
+    #[serde(default)]
+    pub open_with: ProjectOpenWith,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AppTheme {
+    #[default]
+    System,
+    Dark,
+    Light,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AppLanguage {
+    #[default]
+    #[serde(rename = "zh-CN")]
+    ZhCn,
+    #[serde(rename = "en-US")]
+    EnUs,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectOpenWith {
+    #[default]
+    Default,
+    Qoder,
+    Vscode,
+    IntellijIdea,
 }
 
 impl Default for AppSettingsDto {
@@ -222,6 +256,9 @@ impl Default for AppSettingsDto {
         Self {
             claude_path: None,
             sidebar_width: 280,
+            theme: AppTheme::System,
+            language: AppLanguage::ZhCn,
+            open_with: ProjectOpenWith::Default,
         }
     }
 }

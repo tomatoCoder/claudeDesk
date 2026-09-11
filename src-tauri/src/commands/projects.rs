@@ -1,10 +1,13 @@
 use crate::{
     claude::diagnose,
     commands::AppState,
-    domain::{AppSettingsDto, AppSnapshot, ProjectDto},
+    domain::{AppSettingsDto, AppSnapshot, ProjectDto, ProjectOpenWith},
     error::AppError,
 };
-use std::path::PathBuf;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 use tauri::State;
 
 #[tauri::command]
@@ -46,6 +49,75 @@ pub fn remove_project(project_id: String, state: State<'_, AppState>) -> Result<
         ));
     }
     state.storage.remove_project(&project_id)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn open_project(project_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+    super::validate_id(&project_id)?;
+    let project = state.storage.get_project(&project_id)?;
+    let settings = state.storage.load_settings()?;
+    open_project_path(Path::new(&project.path), &settings.open_with)
+}
+
+fn run_open_command(mut command: Command, label: &str) -> Result<(), AppError> {
+    let status = command.status().map_err(|error| {
+        AppError::new(
+            "project_opener_not_found",
+            format!("无法启动 {label}：{error}"),
+            true,
+        )
+    })?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "project_open_failed",
+            format!("{label} 无法打开项目，请确认应用已安装"),
+            true,
+        ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn open_project_path(path: &Path, open_with: &ProjectOpenWith) -> Result<(), AppError> {
+    let (application, label) = match open_with {
+        ProjectOpenWith::Default => (None, "系统默认应用"),
+        ProjectOpenWith::Qoder => (Some("Qoder"), "Qoder"),
+        ProjectOpenWith::Vscode => (Some("Visual Studio Code"), "VS Code"),
+        ProjectOpenWith::IntellijIdea => (Some("IntelliJ IDEA"), "IntelliJ IDEA"),
+    };
+    let mut command = Command::new("open");
+    if let Some(application) = application {
+        command.args(["-a", application]);
+    }
+    command.arg(path);
+    run_open_command(command, label)
+}
+
+#[cfg(target_os = "windows")]
+fn open_project_path(path: &Path, open_with: &ProjectOpenWith) -> Result<(), AppError> {
+    let (executable, label) = match open_with {
+        ProjectOpenWith::Default => ("explorer", "系统默认应用"),
+        ProjectOpenWith::Qoder => ("qoder", "Qoder"),
+        ProjectOpenWith::Vscode => ("code", "VS Code"),
+        ProjectOpenWith::IntellijIdea => ("idea64", "IntelliJ IDEA"),
+    };
+    let mut command = Command::new(executable);
+    command.arg(path);
+    run_open_command(command, label)
+}
+
+#[cfg(target_os = "linux")]
+fn open_project_path(path: &Path, open_with: &ProjectOpenWith) -> Result<(), AppError> {
+    let (executable, label) = match open_with {
+        ProjectOpenWith::Default => ("xdg-open", "系统默认应用"),
+        ProjectOpenWith::Qoder => ("qoder", "Qoder"),
+        ProjectOpenWith::Vscode => ("code", "VS Code"),
+        ProjectOpenWith::IntellijIdea => ("idea", "IntelliJ IDEA"),
+    };
+    let mut command = Command::new(executable);
+    command.arg(path);
+    run_open_command(command, label)
 }
 
 #[tauri::command(rename_all = "camelCase")]

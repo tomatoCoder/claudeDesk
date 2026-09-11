@@ -2,11 +2,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, RunAccepted, TaskDto } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
+import { translate } from './i18n'
 
 export const isDesktop = () => '__TAURI_INTERNALS__' in window
 
 export async function chooseProjectDirectory(): Promise<string | null> {
-  const selected = await open({ directory: true, multiple: false, title: '选择项目目录' })
+  const selected = await open({ directory: true, multiple: false, title: translate('selectProjectDirectory') })
   return typeof selected === 'string' ? selected : null
 }
 
@@ -17,6 +18,7 @@ export const ipc = {
   sessionMessages: (taskId: string) => invoke<ClaudeSessionMessage[]>('get_claude_session_messages', { taskId }),
   addProject: (path: string) => invoke<ProjectDto>('add_project', { path }),
   removeProject: (projectId: string) => invoke<void>('remove_project', { projectId }),
+  openProject: (projectId: string) => invoke<void>('open_project', { projectId }),
   createTask: (projectId: string, title?: string) => invoke<TaskDto>('create_task', { projectId, title }),
   renameTask: (taskId: string, title: string) => invoke<TaskDto>('rename_task', { taskId, title }),
   deleteTask: (taskId: string) => invoke<void>('delete_task', { taskId }),
@@ -30,9 +32,11 @@ export const ipc = {
   loadClaudeSettings: () => invoke<ClaudeSettingsDto>('get_claude_settings'),
   saveClaudeSettings: (version: string, values: ManagedClaudeSettings) =>
     invoke<ClaudeSettingsDto>('save_claude_settings', { version, values }),
+  saveClaudeSettingsJson: (version: string, raw: string) =>
+    invoke<ClaudeSettingsDto>('save_claude_settings_json', { version, raw }),
 }
 
 export function errorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error) return String((error as { message: unknown }).message)
-  return String(error || '发生未知错误')
+  return String(error || translate('unknownError'))
 }

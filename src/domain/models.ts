@@ -21,16 +21,27 @@ export interface TaskDto {
 export interface AppSettingsDto {
   claudePath: string | null
   sidebarWidth: number
+  theme: ThemePreference
+  language: AppLanguage
+  openWith: ProjectOpenWith
 }
+
+export type ThemePreference = 'system' | 'dark' | 'light'
+export type AppLanguage = 'zh-CN' | 'en-US'
+export type ProjectOpenWith = 'default' | 'qoder' | 'vscode' | 'intellij_idea'
 
 export interface ManagedClaudeSettings {
   authToken: string
   baseUrl: string
   model: string
+  autoCompact: boolean
+  autoCompactThreshold: string
+  autoCompactWindow: string
 }
 
 export interface ClaudeSettingsDto {
   values: ManagedClaudeSettings
+  raw: string
   version: string
   path: string
 }
@@ -38,6 +49,11 @@ export interface ClaudeSettingsDto {
 export interface SaveClaudeSettingsInput {
   version: string
   values: ManagedClaudeSettings
+}
+
+export interface SaveClaudeSettingsJsonInput {
+  version: string
+  raw: string
 }
 
 export interface ClaudeSessionMessage {

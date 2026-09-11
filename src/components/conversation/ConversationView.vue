@@ -4,6 +4,7 @@ import { AlertTriangle } from 'lucide-vue-next'
 import type { TaskDto } from '../../domain/models'
 import type { TaskEvent } from '../../domain/events'
 import { errorMessage, ipc } from '../../services/ipc'
+import { useI18n } from '../../services/i18n'
 import MessageBubble from './MessageBubble.vue'
 import ToolCard from './ToolCard.vue'
 import ComposerBox from './ComposerBox.vue'
@@ -25,6 +26,7 @@ const emit = defineEmits<{ send: [text: string]; stop: [] }>()
 const error = ref('')
 const scroll = ref<HTMLElement | null>(null)
 const active = computed(() => ['starting', 'running', 'awaiting_permission', 'stopping'].includes(props.task.status))
+const { t } = useI18n()
 
 const items = computed<RenderItem[]>(() => {
   const result: RenderItem[] = []
@@ -81,16 +83,16 @@ watch(() => props.events.length, async () => { await nextTick(); if (scroll.valu
 <template>
   <section class="conversation-shell">
     <div ref="scroll" class="conversation" aria-live="polite">
-      <div v-if="!items.length" class="conversation-empty"><span>✳</span><h2>开始一个 Claude Code 任务</h2><p>消息会在此实时显示。文件修改仍发生在你选择的本地项目中。</p></div>
+      <div v-if="!items.length" class="conversation-empty"><span>✳</span><h2>{{ t('startTask') }}</h2><p>{{ t('startTaskHelp') }}</p></div>
       <div v-else class="timeline">
         <template v-for="item in items" :key="item.key">
           <MessageBubble v-if="item.type === 'message'" :role="item.role" :text="item.text" :streaming="item.streaming" />
           <ToolCard v-else-if="item.type === 'tool'" :name="item.name" :input="item.input" :output="item.output" :is-error="item.isError" :finished="item.finished" />
           <PermissionCard v-else-if="item.type === 'permission'" :tool-name="item.toolName" :input="item.input" :suggestions="item.suggestions" @resolve="resolve(item.requestId, $event)" />
           <QuestionCard v-else-if="item.type === 'question'" :questions="item.questions" @resolve="answer(item.requestId, $event)" @deny="denyQuestion(item.requestId)" />
-          <div v-else-if="item.type === 'conflict'" class="conflict"><AlertTriangle :size="16" />当前项目有 {{ item.count }} 个并行任务，可能同时修改同一文件。</div>
+          <div v-else-if="item.type === 'conflict'" class="conflict"><AlertTriangle :size="16" />{{ t('workspaceConflict', { count: item.count }) }}</div>
           <div v-else-if="item.type === 'error'" class="event-error">{{ item.message }}</div>
-          <div v-else-if="item.type === 'result'" class="result">本轮完成<span v-if="item.turns"> · {{ item.turns }} 轮</span><span v-if="item.cost !== null"> · ${{ item.cost.toFixed(4) }}</span></div>
+          <div v-else-if="item.type === 'result'" class="result">{{ t('turnComplete') }}<span v-if="item.turns"> · {{ t('turns', { count: item.turns }) }}</span><span v-if="item.cost !== null"> · ${{ item.cost.toFixed(4) }}</span></div>
         </template>
       </div>
     </div>
@@ -100,6 +102,6 @@ watch(() => props.events.length, async () => { await nextTick(); if (scroll.valu
 </template>
 
 <style scoped>
-.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid rgba(214,158,46,.3); background: rgba(214,158,46,.07); color: #e5c277; }.event-error { border: 1px solid rgba(207,93,93,.3); background: rgba(207,93,93,.08); color: #e8a4a4; }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
+.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.event-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
 @media (max-width: 720px) { .timeline { width: calc(100% - 28px); padding-top: 18px; } }
 </style>

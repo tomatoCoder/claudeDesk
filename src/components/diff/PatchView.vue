@@ -9,5 +9,5 @@ function kind(line: string) { if (line.startsWith('+') && !line.startsWith('+++'
 </code></pre></template>
 
 <style scoped>
-.patch { min-height: 0; flex: 1; overflow: auto; margin: 0; padding: 10px 0 40px; background: #090908; color: #b9b2a8; font: 10px/1.55 var(--font-mono); }.patch code { display: block; padding: 0 10px; white-space: pre-wrap; word-break: break-all; }.patch .add { background: rgba(80,150,95,.11); color: #9bcba5; }.patch .del { background: rgba(190,70,70,.11); color: #dda0a0; }.patch .hunk { color: #94aad2; }
+.patch { min-height: 0; flex: 1; overflow: auto; margin: 0; padding: 10px 0 40px; background: var(--surface-code); color: var(--text-code-muted); font: 10px/1.55 var(--font-mono); }.patch code { display: block; padding: 0 10px; white-space: pre-wrap; word-break: break-all; }.patch .add { background: var(--diff-add-bg); color: var(--diff-add-text); }.patch .del { background: var(--diff-del-bg); color: var(--diff-del-text); }.patch .hunk { color: var(--diff-hunk-text); }
 </style>

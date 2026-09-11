@@ -31,17 +31,26 @@ fn save_preserves_unmanaged_json_and_removes_empty_managed_fields() {
                 auth_token: Some(String::new()),
                 base_url: Some("https://gateway.example.com".into()),
                 model: Some("gateway-sonnet".into()),
+                ..SettingsPatch::default()
             },
         )
         .unwrap();
 
-    let saved: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    assert_eq!(saved.pointer("/permissions/allow/0"), Some(&serde_json::json!("Read")));
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(
+        saved.pointer("/permissions/allow/0"),
+        Some(&serde_json::json!("Read"))
+    );
     assert_eq!(saved.pointer("/env/KEEP"), Some(&serde_json::json!("yes")));
     assert_eq!(saved.pointer("/env/ANTHROPIC_AUTH_TOKEN"), None);
-    assert_eq!(saved.pointer("/env/ANTHROPIC_BASE_URL"), Some(&serde_json::json!("https://gateway.example.com")));
-    assert_eq!(saved.pointer("/env/ANTHROPIC_MODEL"), Some(&serde_json::json!("gateway-sonnet")));
+    assert_eq!(
+        saved.pointer("/env/ANTHROPIC_BASE_URL"),
+        Some(&serde_json::json!("https://gateway.example.com"))
+    );
+    assert_eq!(
+        saved.pointer("/env/ANTHROPIC_MODEL"),
+        Some(&serde_json::json!("gateway-sonnet"))
+    );
     assert!(repository.backup_paths().unwrap().len() == 1);
 }
 

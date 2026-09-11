@@ -8,7 +8,11 @@ const settings = {
     authToken: 'token-secret',
     baseUrl: 'https://gateway.example.com',
     model: 'gateway-sonnet',
+    autoCompact: true,
+    autoCompactThreshold: '',
+    autoCompactWindow: '',
   },
+  raw: '{\n  "env": {}\n}',
   version: 'v1',
   path: '/Users/test/.claude/settings.json',
 }
@@ -33,7 +37,14 @@ describe('SettingsView', () => {
 
     expect(wrapper.emitted('save')?.[0]).toEqual([{
       version: 'v1',
-      values: { authToken: 'token-secret', baseUrl: 'https://gateway.example.com', model: 'next-model' },
+      values: {
+        authToken: 'token-secret',
+        baseUrl: 'https://gateway.example.com',
+        model: 'next-model',
+        autoCompact: true,
+        autoCompactThreshold: '',
+        autoCompactWindow: '',
+      },
     }])
   })
 })
