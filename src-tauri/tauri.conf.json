@@ -30,6 +30,13 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "A desktop client for your installed Claude Code CLI",
     "longDescription": "A local desktop client for the Claude Code CLI with projects, native sessions, streaming conversations, approvals, and managed model settings.",
