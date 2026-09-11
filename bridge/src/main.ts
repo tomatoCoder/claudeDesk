@@ -11,7 +11,8 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import { buildQueryOptions, normalizeSdkMessage } from './agent-adapter.js'
 import { normalizeSession, normalizeSessionMessage } from './catalog.js'
-import { parseBridgeRequest, serializeBridgeEvent, type BridgeEvent, type BridgeRequest, type RunStartRequest } from './protocol.js'
+import { parseBridgeRequest, parseRunControl, serializeBridgeEvent, type BridgeEvent, type BridgeRequest, type RunStartRequest } from './protocol.js'
+import { applyRunControl, RunInput } from './run-input.js'
 
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
 const lines = input[Symbol.asyncIterator]()
@@ -60,8 +61,10 @@ async function handleCatalog(request: Extract<BridgeRequest, { type: `catalog.${
 
 async function handleRun(request: RunStartRequest) {
   let sequence = 0
+  const nextSequence = () => ++sequence
   const abortController = new AbortController()
   const pending = new Map<string, (decision: PermissionResult) => void>()
+  const runInput = new RunInput(request.prompt, randomUUID())
   const canUseTool: CanUseTool = (toolName, input, context) => new Promise((resolve) => {
     const permissionId = randomUUID()
     pending.set(permissionId, resolve)
@@ -71,7 +74,7 @@ async function handleRun(request: RunStartRequest) {
       type,
       requestId: request.requestId,
       runId: request.runId,
-      sequence: ++sequence,
+      sequence: nextSequence(),
       permissionId,
       toolName,
       input,
@@ -85,51 +88,74 @@ async function handleRun(request: RunStartRequest) {
     }, { once: true })
   })
 
-  const controlPump = consumeControls(request.runId, pending, abortController)
-  write({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: ++sequence, status: 'running' })
+  const controlPump = consumeControls(request, pending, abortController, runInput, nextSequence)
+  write({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), status: 'running' })
   try {
     const options = buildQueryOptions(request)
     options.abortController = abortController
     options.canUseTool = canUseTool
-    const stream = query({ prompt: request.prompt, options })
+    const stream = query({ prompt: runInput, options })
     for await (const sdkMessage of stream) {
       for (const event of normalizeSdkMessage(sdkMessage)) {
-        write({ v: 1, ...event, requestId: request.requestId, runId: request.runId, sequence: ++sequence })
+        write({ v: 1, ...event, requestId: request.requestId, runId: request.runId, sequence: nextSequence() })
       }
+      if (isRecord(sdkMessage) && sdkMessage.type === 'result') runInput.close()
     }
-    write({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: ++sequence, status: abortController.signal.aborted ? 'interrupted' : 'completed' })
+    write({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), status: abortController.signal.aborted ? 'interrupted' : 'completed' })
   } catch (error) {
-    write({ v: 1, type: 'run.error', requestId: request.requestId, runId: request.runId, sequence: ++sequence, code: abortController.signal.aborted ? 'RUN_STOPPED' : 'SDK_QUERY_FAILED', message: redact(errorMessage(error)), recoverable: true })
+    write({ v: 1, type: 'run.error', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), code: abortController.signal.aborted ? 'RUN_STOPPED' : 'SDK_QUERY_FAILED', message: redact(errorMessage(error)), recoverable: true })
   } finally {
     for (const resolve of pending.values()) resolve({ behavior: 'deny', message: 'Bridge 已结束' })
     pending.clear()
-    void controlPump
+    runInput.close()
+    input.close()
+    process.stdin.destroy()
+    await controlPump
+    process.stdout.end()
   }
 }
 
-async function consumeControls(runId: string, pending: Map<string, (decision: PermissionResult) => void>, abortController: AbortController) {
+async function consumeControls(
+  request: RunStartRequest,
+  pending: Map<string, (decision: PermissionResult) => void>,
+  abortController: AbortController,
+  runInput: RunInput,
+  nextSequence: () => number,
+) {
   for await (const line of { [Symbol.asyncIterator]: () => lines }) {
-    let value: Record<string, unknown>
-    try { value = JSON.parse(line) as Record<string, unknown> } catch { continue }
-    if (value.runId !== runId) continue
-    if (value.type === 'run.stop') {
+    let control
+    try { control = parseRunControl(line) } catch { continue }
+    if (control.runId !== request.runId) continue
+    if (control.type === 'run.adjust') {
+      const result = applyRunControl(runInput, control)
+      write({
+        v: 1,
+        ...result,
+        requestId: request.requestId,
+        runId: request.runId,
+        sequence: nextSequence(),
+      })
+      continue
+    }
+    if (control.type === 'run.stop') {
+      runInput.close()
       abortController.abort()
       continue
     }
-    if (value.type !== 'permission.resolve' || typeof value.permissionId !== 'string') continue
-    const resolve = pending.get(value.permissionId)
+    const resolve = pending.get(control.permissionId)
     if (!resolve) continue
-    pending.delete(value.permissionId)
-    if (value.behavior === 'allow') {
+    pending.delete(control.permissionId)
+    if (control.behavior === 'allow') {
       resolve({
         behavior: 'allow',
-        updatedInput: isRecord(value.updatedInput) ? value.updatedInput : undefined,
-        updatedPermissions: Array.isArray(value.updatedPermissions) ? value.updatedPermissions as never[] : undefined,
+        updatedInput: isRecord(control.updatedInput) ? control.updatedInput : undefined,
+        updatedPermissions: Array.isArray(control.updatedPermissions) ? control.updatedPermissions as never[] : undefined,
       })
     } else {
-      resolve({ behavior: 'deny', message: typeof value.message === 'string' ? value.message : '用户拒绝了此操作' })
+      resolve({ behavior: 'deny', message: typeof control.message === 'string' ? control.message : '用户拒绝了此操作' })
     }
   }
+  runInput.close()
   abortController.abort()
 }
 

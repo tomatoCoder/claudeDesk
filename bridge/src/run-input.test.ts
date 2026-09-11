@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RunInput } from './run-input.js'
+import { applyRunControl, RunInput } from './run-input.js'
 
 describe('RunInput', () => {
   it('先输出初始消息，再按 FIFO 输出立即调整消息', async () => {
@@ -32,5 +32,17 @@ describe('RunInput', () => {
       message: { content: '这是关闭前的调整' }, priority: 'now',
     })
     expect(await iterator.next()).toEqual({ value: undefined, done: true })
+  })
+
+  it('把 run.adjust 推入输入流并返回 accepted', () => {
+    const input = new RunInput('开始', '00000000-0000-4000-8000-000000000001')
+
+    expect(applyRunControl(input, {
+      v: 1,
+      type: 'run.adjust',
+      runId: 'run-1',
+      adjustmentId: 'a1',
+      text: '改方向',
+    })).toEqual({ type: 'run.adjust.accepted', adjustmentId: 'a1' })
   })
 })

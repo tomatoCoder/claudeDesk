@@ -1,4 +1,18 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { RunControl } from './protocol.js'
+
+export type AdjustmentResult =
+  | { type: 'run.adjust.accepted'; adjustmentId: string }
+  | { type: 'run.adjust.rejected'; adjustmentId: string; reason: string }
+
+export function applyRunControl(
+  input: RunInput,
+  control: Extract<RunControl, { type: 'run.adjust' }>,
+): AdjustmentResult {
+  return input.adjust(control.text.trim(), control.adjustmentId)
+    ? { type: 'run.adjust.accepted', adjustmentId: control.adjustmentId }
+    : { type: 'run.adjust.rejected', adjustmentId: control.adjustmentId, reason: '当前任务已经结束' }
+}
 
 export class RunInput implements AsyncIterable<SDKUserMessage> {
   private readonly messages: SDKUserMessage[]
