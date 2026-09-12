@@ -297,6 +297,33 @@ pub struct RunAccepted {
     pub run_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct QueuedTurnDto {
+    pub id: String,
+    pub task_id: String,
+    pub text: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum TurnSubmission {
+    Started { run_id: String },
+    Queued { queued_turn: QueuedTurnDto },
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueuedTurnsChanged {
+    pub task_id: String,
+    pub queued_turns: Vec<QueuedTurnDto>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitFileStatus {
