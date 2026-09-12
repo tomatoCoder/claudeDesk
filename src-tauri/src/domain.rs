@@ -390,6 +390,42 @@ pub struct WorkspaceDiff {
     pub truncated: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectFileKind {
+    File,
+    Directory,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFileEntry {
+    pub name: String,
+    pub path: String,
+    pub kind: ProjectFileKind,
+    pub extension: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectFilePreviewKind {
+    Text,
+    Image,
+    Binary,
+    TooLarge,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFilePreview {
+    pub path: String,
+    pub kind: ProjectFilePreviewKind,
+    pub mime_type: Option<String>,
+    pub content: Option<String>,
+    pub bytes: Option<Vec<u8>>,
+    pub size: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SlashCommandDto {

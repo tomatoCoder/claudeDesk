@@ -4,6 +4,7 @@ pub mod commands;
 pub mod diagnostics;
 pub mod domain;
 pub mod error;
+pub mod files;
 pub mod permission;
 pub mod process;
 pub mod sessions;
