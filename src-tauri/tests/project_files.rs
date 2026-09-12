@@ -1,7 +1,8 @@
 use claude_desk_lib::{
     domain::ProjectFilePreviewKind,
-    files::{list_directory, read_preview},
+    files::{list_directory, read_preview, search_files},
 };
+use std::process::Command;
 
 #[test]
 fn lists_directories_first_and_returns_only_relative_paths() {
@@ -78,4 +79,62 @@ fn classifies_text_image_binary_and_large_files() {
         read_preview(temp.path(), "large.txt").unwrap().kind,
         ProjectFilePreviewKind::TooLarge
     );
+}
+
+#[test]
+fn searches_git_tracked_and_untracked_files_but_not_ignored_files() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(temp.path().join("src")).unwrap();
+    std::fs::create_dir_all(temp.path().join("docs")).unwrap();
+    std::fs::create_dir_all(temp.path().join("node_modules/pkg")).unwrap();
+    std::fs::write(temp.path().join("src/main.ts"), "main").unwrap();
+    std::fs::write(temp.path().join("docs/Guide.md"), "guide").unwrap();
+    std::fs::write(temp.path().join("node_modules/pkg/dependency.js"), "dep").unwrap();
+    std::fs::write(temp.path().join(".gitignore"), "node_modules/\n").unwrap();
+    assert!(Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(temp.path())
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("git")
+        .args(["add", "src/main.ts"])
+        .current_dir(temp.path())
+        .status()
+        .unwrap()
+        .success());
+
+    let found = search_files(temp.path(), "main", 200).unwrap();
+
+    assert_eq!(
+        found
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>(),
+        vec!["src/main.ts"]
+    );
+    assert!(search_files(temp.path(), "dependency", 200)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn searches_non_git_projects_with_limits_and_skips_dependency_directories() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(temp.path().join("src")).unwrap();
+    std::fs::create_dir_all(temp.path().join("docs")).unwrap();
+    std::fs::create_dir_all(temp.path().join("node_modules")).unwrap();
+    std::fs::write(temp.path().join("src/main.rs"), "main").unwrap();
+    std::fs::write(temp.path().join("docs/main-notes.md"), "notes").unwrap();
+    std::fs::write(temp.path().join("node_modules/main.js"), "ignored").unwrap();
+
+    let found = search_files(temp.path(), "main", 200).unwrap();
+    let limited = search_files(temp.path(), "main", 1).unwrap();
+
+    assert_eq!(found.len(), 2);
+    assert!(found
+        .iter()
+        .all(|entry| !entry.path.starts_with("node_modules/")));
+    assert_eq!(limited.len(), 1);
+    assert_eq!(limited[0].path, "src/main.rs");
 }

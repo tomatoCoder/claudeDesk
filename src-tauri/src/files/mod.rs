@@ -2,9 +2,15 @@ use crate::{
     domain::{ProjectFileEntry, ProjectFileKind, ProjectFilePreview, ProjectFilePreviewKind},
     error::AppError,
 };
-use std::path::{Component, Path, PathBuf};
+use std::{
+    path::{Component, Path, PathBuf},
+    process::Command,
+};
 
 const MAX_PREVIEW_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_SEARCH_RESULTS: usize = 200;
+const MAX_FALLBACK_FILES: usize = 50_000;
+const FALLBACK_SKIPPED_DIRECTORIES: [&str; 4] = [".git", "node_modules", "target", "dist"];
 
 pub fn list_directory(root: &Path, relative: &str) -> Result<Vec<ProjectFileEntry>, AppError> {
     let root = canonical_root(root)?;
@@ -84,6 +90,123 @@ pub fn read_preview(root: &Path, relative: &str) -> Result<ProjectFilePreview, A
         }),
         Err(_) => Ok(binary_preview(path, size)),
     }
+}
+
+pub fn search_files(
+    root: &Path,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ProjectFileEntry>, AppError> {
+    let root = canonical_root(root)?;
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let paths = git_files(&root).unwrap_or_else(|| fallback_files(&root));
+    let mut matches = paths
+        .into_iter()
+        .filter_map(|relative| {
+            let target = resolve_relative(&root, &relative, false).ok()?;
+            target
+                .is_file()
+                .then(|| entry_from_path(&root, target))
+                .transpose()
+                .ok()
+                .flatten()
+        })
+        .filter_map(|entry| {
+            let path = entry.path.to_lowercase();
+            path.contains(&query)
+                .then(|| (search_rank(&entry, &query), entry))
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by(|(left_rank, left), (right_rank, right)| {
+        left_rank
+            .cmp(right_rank)
+            .then_with(|| left.path.to_lowercase().cmp(&right.path.to_lowercase()))
+    });
+    Ok(matches
+        .into_iter()
+        .map(|(_, entry)| entry)
+        .take(limit.clamp(1, MAX_SEARCH_RESULTS))
+        .collect())
+}
+
+fn git_files(root: &Path) -> Option<Vec<String>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|value| !value.is_empty())
+            .filter_map(|value| String::from_utf8(value.to_vec()).ok())
+            .collect(),
+    )
+}
+
+fn fallback_files(root: &Path) -> Vec<String> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut files = Vec::new();
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(metadata) = path.symlink_metadata() else {
+                continue;
+            };
+            if metadata.file_type().is_symlink() {
+                continue;
+            }
+            if metadata.is_dir() {
+                let name = entry.file_name();
+                if !FALLBACK_SKIPPED_DIRECTORIES
+                    .iter()
+                    .any(|skipped| name == *skipped)
+                {
+                    pending.push(path);
+                }
+            } else if metadata.is_file() {
+                if let Ok(relative) = normalize_relative(root, &path) {
+                    files.push(relative);
+                    if files.len() >= MAX_FALLBACK_FILES {
+                        return files;
+                    }
+                }
+            }
+        }
+    }
+    files
+}
+
+fn search_rank(entry: &ProjectFileEntry, query: &str) -> (u8, usize) {
+    let name = entry.name.to_lowercase();
+    let rank = if name == query {
+        0
+    } else if name.starts_with(query) {
+        1
+    } else if name.contains(query) {
+        2
+    } else {
+        3
+    };
+    (rank, name.len())
 }
 
 fn canonical_root(root: &Path) -> Result<PathBuf, AppError> {
