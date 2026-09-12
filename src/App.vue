@@ -2,11 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RefreshCw } from 'lucide-vue-next'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { AppLanguage, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, ThemePreference } from './domain/models'
+import type { AppLanguage, AppPermissionMode, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, ThemePreference } from './domain/models'
 import { useProjectsStore } from './stores/projects'
 import { useRuntimeStore } from './stores/runtime'
 import { chooseProjectDirectory, errorMessage, ipc } from './services/ipc'
 import { listenToTaskEvents } from './services/taskEvents'
+import { listenToQueuedTurns } from './services/queuedTurns'
 import { applyTheme } from './services/theme'
 import { setAppLanguage, useI18n } from './services/i18n'
 import AppSidebar from './components/sidebar/AppSidebar.vue'
@@ -32,6 +33,7 @@ let settingsPoll: number | undefined
 let systemThemeQuery: MediaQueryList | undefined
 
 const taskEvents = computed(() => runtime.events(projects.selectedTaskId))
+const queuedTurns = computed(() => runtime.queuedTurns(projects.selectedTaskId))
 const sidebarStyle = computed(() => ({ '--sidebar-width': `${projects.settings.sidebarWidth}px` }))
 
 function getSystemThemeQuery() {
@@ -52,20 +54,20 @@ watch(() => projects.settings.language, setAppLanguage, { immediate: true })
 onMounted(async () => {
   getSystemThemeQuery().addEventListener('change', handleSystemThemeChange)
   try {
-    unlisten = await listenToTaskEvents((event) => {
+    const unlistenTasks = await listenToTaskEvents((event) => {
       runtime.accept(event)
       if (event.kind === 'status_changed') projects.updateTaskStatus(event.taskId, event.data.status)
     })
+    const unlistenQueued = await listenToQueuedTurns(runtime.replaceQueuedTurns)
     const unlistenExit = await listen<string[]>('app-exit-requested', async () => {
       if (!window.confirm(t('exitConfirm'))) return
       await ipc.confirmAppExit()
     })
-    const previousUnlisten = unlisten
-    unlisten = () => { previousUnlisten?.(); unlistenExit() }
+    unlisten = () => { unlistenTasks(); unlistenQueued(); unlistenExit() }
     await projects.hydrate()
     try { claudeSettings.value = await ipc.loadClaudeSettings() }
     catch (cause) { settingsError.value = errorMessage(cause) }
-    if (projects.selectedTaskId) await runtime.load(projects.selectedTaskId)
+    if (projects.selectedTaskId) await Promise.all([runtime.load(projects.selectedTaskId), runtime.loadQueuedTurns(projects.selectedTaskId)])
   } catch (cause) { error.value = errorMessage(cause) }
   finally { initialising.value = false }
   settingsPoll = window.setInterval(pollSettings, 2000)
@@ -79,7 +81,7 @@ onBeforeUnmount(() => {
 
 watch(() => projects.selectedTaskId, async (taskId) => {
   if (!taskId) return
-  try { await runtime.load(taskId) }
+  try { await Promise.all([runtime.load(taskId), runtime.loadQueuedTurns(taskId)]) }
   catch (cause) { error.value = errorMessage(cause) }
 })
 
@@ -119,10 +121,34 @@ async function renameTask(taskId: string, title: string) {
   catch (cause) { error.value = errorMessage(cause) }
 }
 
-async function send(text: string) {
-  if (!projects.selectedTask) return
-  try { await ipc.sendTurn(projects.selectedTask.id, text) }
-  catch (cause) { error.value = errorMessage(cause) }
+async function submit(text: string) {
+  if (!projects.selectedTask) throw new Error('未选择任务')
+  try { await ipc.submitTurn(projects.selectedTask.id, text) }
+  catch (cause) { error.value = errorMessage(cause); throw cause }
+}
+
+async function updateQueued(id: string, text: string) {
+  if (!projects.selectedTask) throw new Error('未选择任务')
+  try { await ipc.updateQueuedTurn(projects.selectedTask.id, id, text) }
+  catch (cause) { error.value = errorMessage(cause); throw cause }
+}
+
+async function deleteQueued(id: string) {
+  if (!projects.selectedTask) throw new Error('未选择任务')
+  try { await ipc.deleteQueuedTurn(projects.selectedTask.id, id) }
+  catch (cause) { error.value = errorMessage(cause); throw cause }
+}
+
+async function adjustQueued(id: string) {
+  if (!projects.selectedTask) throw new Error('未选择任务')
+  try { await ipc.adjustQueuedTurn(projects.selectedTask.id, id) }
+  catch (cause) { error.value = errorMessage(cause); throw cause }
+}
+
+async function sendQueuedNow(id: string) {
+  if (!projects.selectedTask) throw new Error('未选择任务')
+  try { await ipc.sendQueuedTurn(projects.selectedTask.id, id) }
+  catch (cause) { error.value = errorMessage(cause); throw cause }
 }
 
 async function stop() {
@@ -226,6 +252,19 @@ async function changeOpenWith(openWith: ProjectOpenWith) {
     settingsError.value = errorMessage(cause)
   }
 }
+
+async function changePermissionMode(permissionMode: AppPermissionMode) {
+  if (permissionMode === projects.settings.permissionMode) return
+  const previousPermissionMode = projects.settings.permissionMode
+  projects.settings.permissionMode = permissionMode
+  settingsError.value = ''
+  try {
+    await projects.persistSettings({ ...projects.settings, permissionMode })
+  } catch (cause) {
+    projects.settings.permissionMode = previousPermissionMode
+    settingsError.value = errorMessage(cause)
+  }
+}
 </script>
 
 <template>
@@ -253,6 +292,7 @@ async function changeOpenWith(openWith: ProjectOpenWith) {
         :theme="projects.settings.theme"
         :language="projects.settings.language"
         :open-with="projects.settings.openWith"
+        :permission-mode="projects.settings.permissionMode"
         :cli="projects.cli"
         :saving="savingSettings"
         :external-conflict="settingsConflict"
@@ -261,6 +301,7 @@ async function changeOpenWith(openWith: ProjectOpenWith) {
         @theme-change="changeTheme"
         @language-change="changeLanguage"
         @open-with-change="changeOpenWith"
+        @permission-mode-change="changePermissionMode"
         @save="saveClaudeSettings"
         @save-json="saveClaudeSettingsJson"
         @reload="reloadSettings"
@@ -278,7 +319,7 @@ async function changeOpenWith(openWith: ProjectOpenWith) {
           <div v-if="claudeSettings?.values.model" class="model-chip" :title="t('newSessionDefaultModel')">{{ claudeSettings.values.model }}</div>
         </header>
         <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
-        <ConversationView :task="projects.selectedTask" :events="taskEvents" :cli-ready="projects.cli.status === 'ready'" @send="send" @stop="stop" />
+        <ConversationView :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" />
       </template>
       <EmptyState v-else-if="!initialising && !projects.projects.length" :title="t('emptyTitle')" :description="t('emptyDescription')" :action="t('addLocalProject')" @action="addProject" />
       <EmptyState v-else-if="!initialising" :title="t('newTaskTitle')" :description="t('newTaskDescription')" :action="t('newTaskTitle')" @action="projects.selectedProjectId && createTask(projects.selectedProjectId)" />

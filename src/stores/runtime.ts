@@ -1,11 +1,13 @@
 import { reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { TaskEvent } from '../domain/events'
+import type { QueuedTurnDto, QueuedTurnsChanged } from '../domain/models'
 import { ipc } from '../services/ipc'
 import { sessionMessagesToEvents } from '../services/sessionMessages'
 
 export const useRuntimeStore = defineStore('runtime', () => {
   const byTask = reactive<Record<string, TaskEvent[]>>({})
+  const queuedByTask = reactive<Record<string, QueuedTurnDto[]>>({})
   const loadingTaskId = ref<string | null>(null)
 
   async function load(taskId: string) {
@@ -28,7 +30,19 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
   function events(taskId: string | null): TaskEvent[] { return taskId ? byTask[taskId] ?? [] : [] }
 
-  return { byTask, loadingTaskId, load, accept, events }
+  async function loadQueuedTurns(taskId: string) {
+    queuedByTask[taskId] = await ipc.listQueuedTurns(taskId)
+  }
+
+  function replaceQueuedTurns(event: QueuedTurnsChanged) {
+    queuedByTask[event.taskId] = event.queuedTurns
+  }
+
+  function queuedTurns(taskId: string | null): QueuedTurnDto[] {
+    return taskId ? queuedByTask[taskId] ?? [] : []
+  }
+
+  return { byTask, queuedByTask, loadingTaskId, load, accept, events, loadQueuedTurns, replaceQueuedTurns, queuedTurns }
 })
 
 function dedupe(events: TaskEvent[]) {

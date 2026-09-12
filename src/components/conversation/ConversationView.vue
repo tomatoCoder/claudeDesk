@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { AlertTriangle } from 'lucide-vue-next'
-import type { TaskDto } from '../../domain/models'
+import type { QueuedTurnDto, TaskDto } from '../../domain/models'
 import type { TaskEvent } from '../../domain/events'
 import { errorMessage, ipc } from '../../services/ipc'
 import { useI18n } from '../../services/i18n'
@@ -21,12 +21,23 @@ type RenderItem =
   | { type: 'conflict'; key: string; count: number }
   | { type: 'result'; key: string; cost: number | null; turns: number | null }
 
-const props = defineProps<{ task: TaskDto; events: TaskEvent[]; cliReady: boolean }>()
-const emit = defineEmits<{ send: [text: string]; stop: [] }>()
+const props = defineProps<{
+  task: TaskDto
+  events: TaskEvent[]
+  cliReady: boolean
+  queuedTurns?: QueuedTurnDto[]
+  submit?: (text: string) => Promise<void>
+  adjust?: (id: string) => Promise<void>
+  sendNow?: (id: string) => Promise<void>
+  remove?: (id: string) => Promise<void>
+  update?: (id: string, text: string) => Promise<void>
+}>()
+const emit = defineEmits<{ stop: [] }>()
 const error = ref('')
 const scroll = ref<HTMLElement | null>(null)
 const active = computed(() => ['starting', 'running', 'awaiting_permission', 'stopping'].includes(props.task.status))
 const { t } = useI18n()
+const unavailable = async () => { throw new Error('消息操作不可用') }
 
 const items = computed<RenderItem[]>(() => {
   const result: RenderItem[] = []
@@ -97,7 +108,7 @@ watch(() => props.events.length, async () => { await nextTick(); if (scroll.valu
       </div>
     </div>
     <InlineError v-if="error" :message="error" @close="error = ''" />
-    <ComposerBox :running="active" :disabled="!cliReady" @send="emit('send', $event)" @stop="emit('stop')" />
+    <ComposerBox :status="task.status" :queued-turns="queuedTurns ?? []" :disabled="!cliReady" :submit="submit ?? unavailable" :adjust="adjust ?? unavailable" :send-now="sendNow ?? unavailable" :remove="remove ?? unavailable" :update="update ?? unavailable" @stop="emit('stop')" />
   </section>
 </template>
 

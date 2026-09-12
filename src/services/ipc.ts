@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, RunAccepted, TaskDto } from '../domain/models'
+import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, QueuedTurnDto, RunAccepted, TaskDto, TurnSubmission } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
 import { translate } from './i18n'
 
@@ -13,6 +13,7 @@ export async function chooseProjectDirectory(): Promise<string | null> {
 
 export const ipc = {
   confirmAppExit: () => invoke<void>('confirm_app_exit'),
+  readDragFilePaths: () => invoke<string[]>('read_drag_file_paths'),
   snapshot: () => invoke<AppSnapshot>('get_snapshot'),
   refreshSessions: () => invoke<AppSnapshot>('refresh_claude_sessions'),
   sessionMessages: (taskId: string) => invoke<ClaudeSessionMessage[]>('get_claude_session_messages', { taskId }),
@@ -24,6 +25,12 @@ export const ipc = {
   deleteTask: (taskId: string) => invoke<void>('delete_task', { taskId }),
   listEvents: (taskId: string) => invoke<TaskEvent[]>('list_task_events', { taskId, offset: 0, limit: 5000 }),
   sendTurn: (taskId: string, prompt: string) => invoke<RunAccepted>('send_turn', { taskId, prompt }),
+  submitTurn: (taskId: string, prompt: string) => invoke<TurnSubmission>('submit_turn', { taskId, prompt }),
+  listQueuedTurns: (taskId: string) => invoke<QueuedTurnDto[]>('list_queued_turns', { taskId }),
+  updateQueuedTurn: (taskId: string, queuedTurnId: string, prompt: string) => invoke<QueuedTurnDto>('update_queued_turn', { taskId, queuedTurnId, prompt }),
+  deleteQueuedTurn: (taskId: string, queuedTurnId: string) => invoke<void>('delete_queued_turn', { taskId, queuedTurnId }),
+  adjustQueuedTurn: (taskId: string, queuedTurnId: string) => invoke<void>('adjust_queued_turn', { taskId, queuedTurnId }),
+  sendQueuedTurn: (taskId: string, queuedTurnId: string) => invoke<RunAccepted>('send_queued_turn', { taskId, queuedTurnId }),
   cancelTask: (taskId: string) => invoke<void>('cancel_task', { taskId }),
   resolvePermission: (taskId: string, requestId: string, decision: string, updatedInput: unknown, permissionUpdate?: unknown) =>
     invoke<void>('resolve_permission', { taskId, requestId, decision, updatedInput, permissionUpdate }),

@@ -36,7 +36,7 @@ export interface RunStartRequest {
   sessionId?: string
   model?: string
   modelOverride?: string
-  permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk'
+  permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'auto' | 'bypassPermissions'
 }
 
 export type BridgeRequest = HandshakeRequest | CatalogRequest | CommandsRequest | RunStartRequest

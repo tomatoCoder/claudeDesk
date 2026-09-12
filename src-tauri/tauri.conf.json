@@ -20,6 +20,7 @@
         "center": true,
         "resizable": true,
         "fullscreen": false,
+        "dragDropEnabled": false,
         "backgroundColor": "#0b0b0a"
       }
     ],

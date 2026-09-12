@@ -24,11 +24,13 @@ export interface AppSettingsDto {
   theme: ThemePreference
   language: AppLanguage
   openWith: ProjectOpenWith
+  permissionMode: AppPermissionMode
 }
 
 export type ThemePreference = 'system' | 'dark' | 'light'
 export type AppLanguage = 'zh-CN' | 'en-US'
 export type ProjectOpenWith = 'default' | 'qoder' | 'vscode' | 'intellij_idea'
+export type AppPermissionMode = 'default' | 'auto' | 'bypass'
 
 export interface ManagedClaudeSettings {
   authToken: string
@@ -80,6 +82,22 @@ export interface AppSnapshot {
 }
 
 export interface RunAccepted { runId: string }
+
+export interface QueuedTurnDto {
+  id: string
+  taskId: string
+  text: string
+  createdAt: string
+}
+
+export type TurnSubmission =
+  | { kind: 'started'; runId: string }
+  | { kind: 'queued'; queuedTurn: QueuedTurnDto }
+
+export interface QueuedTurnsChanged {
+  taskId: string
+  queuedTurns: QueuedTurnDto[]
+}
 
 export interface CommandError {
   code: string

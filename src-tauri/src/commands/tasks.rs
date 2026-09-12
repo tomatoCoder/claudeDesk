@@ -1,6 +1,6 @@
 use crate::{
     commands::AppState,
-    domain::{RunAccepted, TaskDto, TaskEvent},
+    domain::{QueuedTurnDto, RunAccepted, TaskDto, TaskEvent, TurnSubmission},
     error::AppError,
 };
 use tauri::{AppHandle, State};
@@ -66,6 +66,72 @@ pub fn send_turn(
 ) -> Result<RunAccepted, AppError> {
     super::validate_id(&task_id)?;
     state.coordinator.send_turn(app, task_id, prompt)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn submit_turn(
+    task_id: String,
+    prompt: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<TurnSubmission, AppError> {
+    super::validate_id(&task_id)?;
+    state.coordinator.submit_turn(app, task_id, prompt)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn list_queued_turns(task_id: String, state: State<'_, AppState>) -> Result<Vec<QueuedTurnDto>, AppError> {
+    super::validate_id(&task_id)?;
+    state.coordinator.list_queued_turns(&task_id)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn update_queued_turn(
+    task_id: String,
+    queued_turn_id: String,
+    prompt: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<QueuedTurnDto, AppError> {
+    super::validate_id(&task_id)?;
+    super::validate_id(&queued_turn_id)?;
+    state.coordinator.update_queued_turn(&app, &task_id, &queued_turn_id, prompt)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn delete_queued_turn(
+    task_id: String,
+    queued_turn_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    super::validate_id(&task_id)?;
+    super::validate_id(&queued_turn_id)?;
+    state.coordinator.delete_queued_turn(&app, &task_id, &queued_turn_id)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn adjust_queued_turn(
+    task_id: String,
+    queued_turn_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    super::validate_id(&task_id)?;
+    super::validate_id(&queued_turn_id)?;
+    state.coordinator.adjust_queued_turn(&app, &task_id, &queued_turn_id).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn send_queued_turn(
+    task_id: String,
+    queued_turn_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RunAccepted, AppError> {
+    super::validate_id(&task_id)?;
+    super::validate_id(&queued_turn_id)?;
+    state.coordinator.send_queued_turn(app, task_id, queued_turn_id).await
 }
 
 #[tauri::command(rename_all = "camelCase")]

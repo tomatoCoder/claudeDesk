@@ -28,6 +28,7 @@ export function buildQueryOptions(context: QueryContext): Options {
     permissionMode: context.permissionMode ?? 'default',
     settingSources: ['user', 'project', 'local'],
   }
+  if (context.permissionMode === 'bypassPermissions') options.allowDangerouslySkipPermissions = true
   if (context.sessionId) options.resume = context.sessionId
   if (context.modelOverride?.trim()) options.model = context.modelOverride.trim()
   else if (!context.sessionId && context.model?.trim()) options.model = context.model.trim()

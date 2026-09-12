@@ -61,6 +61,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::application::confirm_app_exit,
+            commands::drag::read_drag_file_paths,
             commands::projects::get_snapshot,
             commands::projects::add_project,
             commands::projects::remove_project,
@@ -76,6 +77,12 @@ pub fn run() {
             commands::tasks::delete_task,
             commands::tasks::list_task_events,
             commands::tasks::send_turn,
+            commands::tasks::submit_turn,
+            commands::tasks::list_queued_turns,
+            commands::tasks::update_queued_turn,
+            commands::tasks::delete_queued_turn,
+            commands::tasks::adjust_queued_turn,
+            commands::tasks::send_queued_turn,
             commands::tasks::cancel_task,
             commands::permissions::resolve_permission,
             commands::diagnostics::diagnose_claude,

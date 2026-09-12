@@ -3,6 +3,7 @@ import { reactive, ref, watch } from 'vue'
 import { Braces, CheckCircle2, Eye, EyeOff, RefreshCw, SlidersHorizontal, XCircle } from 'lucide-vue-next'
 import type {
   AppLanguage,
+  AppPermissionMode,
   ClaudeSettingsDto,
   CliDiagnosticDto,
   ManagedClaudeSettings,
@@ -21,17 +22,19 @@ const props = withDefaults(defineProps<{
   theme?: ThemePreference
   language?: AppLanguage
   openWith?: ProjectOpenWith
+  permissionMode?: AppPermissionMode
   cli: CliDiagnosticDto
   saving?: boolean
   externalConflict?: boolean
   error?: string
-}>(), { theme: 'system', language: 'zh-CN', openWith: 'default' })
+}>(), { theme: 'system', language: 'zh-CN', openWith: 'default', permissionMode: 'default' })
 const emit = defineEmits<{
   save: [input: SaveClaudeSettingsInput]
   saveJson: [input: SaveClaudeSettingsJsonInput]
   themeChange: [theme: ThemePreference]
   languageChange: [language: AppLanguage]
   openWithChange: [openWith: ProjectOpenWith]
+  permissionModeChange: [permissionMode: AppPermissionMode]
   refresh: []
   reload: []
   close: []
@@ -133,6 +136,10 @@ function changeLanguage(event: Event) {
 
 function changeOpenWith(event: Event) {
   emit('openWithChange', (event.target as HTMLSelectElement).value as ProjectOpenWith)
+}
+
+function changePermissionMode(event: Event) {
+  emit('permissionModeChange', (event.target as HTMLSelectElement).value as AppPermissionMode)
 }
 </script>
 
@@ -251,8 +258,17 @@ function changeOpenWith(event: Event) {
                   <option value="intellij_idea">IntelliJ IDEA</option>
                 </select>
               </label>
+              <label class="field">
+                <span>{{ t('permissionMode') }}</span>
+                <small>{{ t('permissionModeHelp') }}</small>
+                <select name="permissionMode" :value="permissionMode" @change="changePermissionMode">
+                  <option value="default">{{ t('permissionAskEveryTime') }}</option>
+                  <option value="auto">{{ t('permissionSmartApprove') }}</option>
+                  <option value="bypass">{{ t('permissionAllowAll') }}</option>
+                </select>
+              </label>
             </div>
-            <div class="permission-note">{{ t('permissionNote') }}</div>
+            <div v-if="permissionMode === 'bypass'" class="permission-note permission-warning">{{ t('permissionBypassWarning') }}</div>
           </section>
 
           <div class="diagnostic" :class="cli.status">
@@ -282,7 +298,7 @@ function changeOpenWith(event: Event) {
 .token-input { position: relative; }.token-input input { padding-right: 42px; }.token-input button { position: absolute; top: 4px; right: 4px; color: var(--text-secondary); }
 .toggle-card { position: relative; display: flex; align-items: center; gap: 16px; margin-bottom: 18px; padding: 13px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-raised); cursor: pointer; }.toggle-card > span { min-width: 0; flex: 1; }.toggle-card strong,.toggle-card small { display: block; }.toggle-card small { margin-top: 3px; color: var(--text-muted); font-size: 11px; }.toggle-card input { position: absolute; width: 1px; height: 1px; opacity: 0; }.toggle-card i { position: relative; width: 38px; height: 22px; flex: 0 0 38px; border-radius: 999px; background: var(--border-strong); transition: background .16s ease; }.toggle-card i::after { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface-root); content: ''; transition: transform .16s ease; }.toggle-card input:checked + i { background: var(--accent); }.toggle-card input:checked + i::after { transform: translateX(16px); }.toggle-card:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .json-section textarea { display: block; width: 100%; min-height: 390px; resize: vertical; padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); outline: 0; background: var(--surface-code); color: var(--text-code-muted); font: 12px/1.6 var(--font-mono); tab-size: 2; }.json-section textarea:focus { border-color: var(--accent); }.json-error { margin-top: 9px; color: var(--text-danger); font-size: 12px; }.settings-path { margin-top: 9px; color: var(--text-muted); font-size: 11px; }.settings-path code { font-family: var(--font-mono); }
-.app-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.permission-note { margin-top: 17px; padding: 11px 13px; border-radius: var(--radius-sm); background: var(--surface-subtle); color: var(--text-muted); font-size: 11px; }
+.app-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.permission-note { margin-top: 17px; padding: 11px 13px; border-radius: var(--radius-sm); background: var(--surface-subtle); color: var(--text-muted); font-size: 11px; }.permission-warning { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }
 .diagnostic { display: flex; gap: 11px; padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--warning); }.diagnostic.ready { color: var(--success); }.diagnostic div { min-width: 0; flex: 1; }.diagnostic strong { color: var(--text-primary); }.diagnostic p { margin: 4px 0; color: var(--text-secondary); }.diagnostic code { color: var(--text-muted); font: 10px var(--font-mono); }
 .conflict,.settings-error { margin-bottom: 18px; padding: 11px 12px; border-radius: var(--radius-sm); line-height: 1.45; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.conflict button { margin-left: 8px; border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; }.settings-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }
 .settings-footer { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; padding: 14px 28px; border-top: 1px solid var(--border-subtle); background: var(--surface-header); }.settings-footer > span { flex: 1; color: var(--text-muted); font-size: 11px; }

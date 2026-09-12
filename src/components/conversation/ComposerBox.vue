@@ -1,29 +1,42 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { ArrowUp, Square } from 'lucide-vue-next'
-import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useI18n } from '../../services/i18n'
-import { isDesktop } from '../../services/ipc'
+import { ipc, isDesktop } from '../../services/ipc'
+import type { QueuedTurnDto } from '../../domain/models'
+import type { TaskStatus } from '../../domain/events'
+import QueuedTurnList from './QueuedTurnList.vue'
 
-const props = defineProps<{ disabled?: boolean; running?: boolean }>()
-const emit = defineEmits<{ send: [text: string]; stop: [] }>()
+const props = defineProps<{
+  disabled?: boolean
+  status: TaskStatus
+  queuedTurns: QueuedTurnDto[]
+  submit: (text: string) => Promise<void>
+  adjust: (id: string) => Promise<void>
+  sendNow: (id: string) => Promise<void>
+  remove: (id: string) => Promise<void>
+  update: (id: string, text: string) => Promise<void>
+}>()
+const emit = defineEmits<{ stop: [] }>()
 const text = ref('')
-const composer = ref<HTMLElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const dragActive = ref(false)
+const submitting = ref(false)
+const busyIds = ref<string[]>([])
 const { t } = useI18n()
-let nativeDropUnlisten: UnlistenFn | undefined
-let scaleFactor = window.devicePixelRatio || 1
 let lastDropKey = ''
 let lastDropAt = 0
 
-function send() {
+async function send() {
   const value = text.value.trim()
-  if (!value || props.disabled || props.running) return
-  text.value = ''
-  emit('send', value)
+  if (!value || props.disabled || submitting.value) return
+  submitting.value = true
+  try {
+    await props.submit(value)
+    text.value = ''
+  } catch {
+    // App 层已展示 IPC 错误；保留输入内容供用户修正后重试。
+  } finally { submitting.value = false }
 }
 
 function keydown(event: KeyboardEvent) {
@@ -45,13 +58,8 @@ function insertNewline() {
   })
 }
 
-function isInsideComposer(x: number, y: number) {
-  const rect = composer.value?.getBoundingClientRect()
-  return !!rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
-}
-
 async function appendPaths(paths: string[]) {
-  if (props.disabled || props.running) return
+  if (props.disabled) return
   const unique = [...new Set(paths.map((path) => path.trim()).filter(Boolean))]
   if (!unique.length) return
   const now = Date.now()
@@ -64,6 +72,16 @@ async function appendPaths(paths: string[]) {
   await nextTick()
   textarea.value?.focus()
   textarea.value?.setSelectionRange(text.value.length, text.value.length)
+}
+
+async function queueAction(id: string, action: (id: string) => Promise<void>) {
+  if (busyIds.value.includes(id)) return
+  busyIds.value = [...busyIds.value, id]
+  try { await action(id) }
+  catch {
+    // App 层统一显示操作错误，避免模板事件留下未处理的 Promise。
+  }
+  finally { busyIds.value = busyIds.value.filter((item) => item !== id) }
 }
 
 function fileUriToPath(value: string) {
@@ -93,45 +111,32 @@ function browserDropPaths(dataTransfer: DataTransfer) {
   return [...filePaths, ...uriPaths, ...plainPaths]
 }
 
-function handleBrowserDrop(event: DragEvent) {
+async function handleBrowserDrop(event: DragEvent) {
   dragActive.value = false
-  if (event.dataTransfer) void appendPaths(browserDropPaths(event.dataTransfer))
+  if (!event.dataTransfer) return
+  const paths = browserDropPaths(event.dataTransfer)
+  if (isDesktop()) {
+    try {
+      for (const path of await ipc.readDragFilePaths()) if (!paths.includes(path)) paths.push(path)
+    } catch {
+      // Drag pasteboard unavailable — keep whatever the browser exposed.
+    }
+  }
+  await appendPaths(paths)
 }
 
 function handleBrowserDragLeave(event: DragEvent) {
   const current = event.currentTarget as HTMLElement
   if (!event.relatedTarget || !current.contains(event.relatedTarget as Node)) dragActive.value = false
 }
-
-async function installNativeDropListener() {
-  if (!isDesktop()) return
-  scaleFactor = await getCurrentWindow().scaleFactor()
-  nativeDropUnlisten = await getCurrentWebview().onDragDropEvent((event) => {
-    const payload = event.payload
-    if (payload.type === 'leave') {
-      dragActive.value = false
-      return
-    }
-    const position = payload.position.toLogical(scaleFactor)
-    const inside = isInsideComposer(position.x, position.y)
-    if (payload.type === 'drop') {
-      dragActive.value = false
-      if (inside) void appendPaths(payload.paths)
-      return
-    }
-    dragActive.value = inside && !props.disabled && !props.running
-  })
-}
-
-onMounted(() => { void installNativeDropListener() })
-onBeforeUnmount(() => nativeDropUnlisten?.())
 </script>
 
 <template>
-  <div ref="composer" class="composer" :class="{ 'drag-active': dragActive }" @dragenter.prevent="dragActive = !disabled && !running" @dragover.prevent="dragActive = !disabled && !running" @dragleave="handleBrowserDragLeave" @drop.prevent="handleBrowserDrop">
+  <div class="composer" :class="{ 'drag-active': dragActive }" @dragenter.prevent="dragActive = !disabled" @dragover.prevent="dragActive = !disabled" @dragleave="handleBrowserDragLeave" @drop.prevent="handleBrowserDrop">
     <div v-if="dragActive" class="drop-hint">{{ t('dropFilesHere') }}</div>
-    <textarea ref="textarea" v-model="text" rows="3" :disabled="disabled || running" :placeholder="running ? t('claudeWorking') : t('sendTaskPlaceholder')" :aria-label="t('sendMessage')" @keydown="keydown" />
-    <div class="composer-footer"><span>{{ t('sendShortcut') }}</span><button v-if="running" class="stop" type="button" :title="t('stopTask')" @click="emit('stop')"><Square :size="14" /></button><button v-else class="send" type="button" :disabled="disabled || !text.trim()" :title="t('send')" @click="send"><ArrowUp :size="17" /></button></div>
+    <QueuedTurnList :turns="queuedTurns" :status="status" :busy-ids="busyIds" @adjust="queueAction($event, adjust)" @send-now="queueAction($event, sendNow)" @remove="queueAction($event, remove)" @update="(id, value) => queueAction(id, () => update(id, value))" />
+    <textarea ref="textarea" v-model="text" rows="3" :disabled="disabled" placeholder="随心输入" :aria-label="t('sendMessage')" @keydown="keydown" />
+    <div class="composer-footer"><span>{{ t('sendShortcut') }}</span><button v-if="['starting', 'running', 'awaiting_permission', 'stopping'].includes(status)" class="stop" type="button" :title="t('stopTask')" @click="emit('stop')"><Square :size="14" /></button><button data-testid="composer-submit" class="send" type="button" :disabled="disabled || submitting || !text.trim()" :title="t('send')" @click="send"><ArrowUp :size="17" /></button></div>
   </div>
 </template>
 

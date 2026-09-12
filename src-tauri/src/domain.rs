@@ -221,6 +221,8 @@ pub struct AppSettingsDto {
     pub language: AppLanguage,
     #[serde(default)]
     pub open_with: ProjectOpenWith,
+    #[serde(default)]
+    pub permission_mode: AppPermissionMode,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -251,6 +253,15 @@ pub enum ProjectOpenWith {
     IntellijIdea,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AppPermissionMode {
+    #[default]
+    Default,
+    Auto,
+    Bypass,
+}
+
 impl Default for AppSettingsDto {
     fn default() -> Self {
         Self {
@@ -259,6 +270,7 @@ impl Default for AppSettingsDto {
             theme: AppTheme::System,
             language: AppLanguage::ZhCn,
             open_with: ProjectOpenWith::Default,
+            permission_mode: AppPermissionMode::default(),
         }
     }
 }

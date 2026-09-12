@@ -2,6 +2,8 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::domain::QueuedTurnDto;
 
+use crate::domain::TaskStatus;
+
 #[derive(Default)]
 pub struct TurnQueue {
     by_task: HashMap<String, VecDeque<QueuedTurnDto>>,
@@ -52,8 +54,18 @@ impl TurnQueue {
             .map(|turn| (turn, 0))
     }
 
+    pub fn remove(&mut self, task_id: &str, id: &str) -> Option<QueuedTurnDto> {
+        let turns = self.by_task.get_mut(task_id)?;
+        let index = turns.iter().position(|turn| turn.id == id)?;
+        turns.remove(index)
+    }
+
     pub fn restore(&mut self, task_id: &str, index: usize, turn: QueuedTurnDto) {
         let turns = self.by_task.entry(task_id.to_string()).or_default();
         turns.insert(index.min(turns.len()), turn);
     }
+}
+
+pub fn should_auto_start(status: &TaskStatus) -> bool {
+    matches!(status, TaskStatus::Completed)
 }
