@@ -13,6 +13,8 @@ export async function chooseProjectDirectory(): Promise<string | null> {
 
 export const ipc = {
   confirmAppExit: () => invoke<void>('confirm_app_exit'),
+  saveClipboardFile: (name: string, mimeType: string, bytes: number[]) =>
+    invoke<string>('save_clipboard_file', { name, mimeType, bytes }),
   readDragFilePaths: () => invoke<string[]>('read_drag_file_paths'),
   snapshot: () => invoke<AppSnapshot>('get_snapshot'),
   refreshSessions: () => invoke<AppSnapshot>('refresh_claude_sessions'),

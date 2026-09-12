@@ -164,6 +164,28 @@ async function pickFiles() {
   }
 }
 
+async function handlePaste(event: ClipboardEvent) {
+  if (props.disabled || !isDesktop()) return
+  const files = [...(event.clipboardData?.items ?? [])]
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null)
+  if (!files.length) return
+
+  // 文件粘贴由附件链路接管；普通文本仍保留 textarea 的原生粘贴行为。
+  event.preventDefault()
+  const paths: string[] = []
+  for (const file of files) {
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()))
+      paths.push(await ipc.saveClipboardFile(file.name, file.type, bytes))
+    } catch {
+      // 单个剪贴板文件失败不影响其余文件，也不打断当前输入。
+    }
+  }
+  addAttachments(paths)
+}
+
 async function queueAction(id: string, action: (id: string) => Promise<void>) {
   if (busyIds.value.includes(id)) return
   busyIds.value = [...busyIds.value, id]
@@ -236,7 +258,7 @@ defineExpose({ focus: () => textarea.value?.focus() })
       <ul v-if="attachments.length" class="attachments">
         <li v-for="path in attachments" :key="path" class="attachment-chip" :title="path"><Paperclip :size="12" /><span class="attachment-name">{{ basename(path) }}</span><button class="attachment-remove" type="button" :title="t('removeAttachment')" :aria-label="`${t('removeAttachment')}：${basename(path)}`" @click="removeAttachment(path)"><X :size="12" /></button></li>
       </ul>
-      <textarea ref="textarea" v-model="text" rows="3" :disabled="disabled" placeholder="随心输入" :aria-label="t('sendMessage')" @keydown="keydown" @input="syncCaret" @keyup="syncCaret" @click="syncCaret" @select="syncCaret" />
+      <textarea ref="textarea" v-model="text" rows="3" :disabled="disabled" placeholder="随心输入" :aria-label="t('sendMessage')" @keydown="keydown" @paste="handlePaste" @input="syncCaret" @keyup="syncCaret" @click="syncCaret" @select="syncCaret" />
       <div class="composer-footer"><button v-if="isDesktop()" class="attach" type="button" :disabled="disabled" :title="t('addAttachment')" :aria-label="t('addAttachment')" @click="pickFiles"><Paperclip :size="16" /></button><span>{{ t('sendShortcut') }}</span><button v-if="['starting', 'running', 'awaiting_permission', 'stopping'].includes(status)" class="stop" type="button" :title="t('stopTask')" @click="emit('stop')"><Square :size="14" /></button><button data-testid="composer-submit" class="send" type="button" :disabled="disabled || submitting || !canSend" :title="t('send')" @click="send"><ArrowUp :size="17" /></button></div>
     </div>
   </div>

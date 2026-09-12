@@ -61,6 +61,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::application::confirm_app_exit,
+            commands::clipboard::save_clipboard_file,
             commands::drag::read_drag_file_paths,
             commands::projects::get_snapshot,
             commands::projects::add_project,

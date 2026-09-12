@@ -3,6 +3,22 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import ComposerBox from './ComposerBox.vue'
 
+const { saveClipboardFile } = vi.hoisted(() => ({
+  saveClipboardFile: vi.fn(),
+}))
+
+vi.mock('../../services/ipc', () => ({
+  isDesktop: () => true,
+  ipc: {
+    readDragFilePaths: vi.fn().mockResolvedValue([]),
+    saveClipboardFile,
+  },
+}))
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn().mockResolvedValue(null),
+}))
+
 const commands = [
   { name: 'review', description: 'Review code', argumentHint: '<path>', aliases: [] },
   { name: 'permissions', description: 'Manage permissions', argumentHint: '', aliases: [] },
@@ -130,5 +146,42 @@ describe('ComposerBox slash menu', () => {
     await wrapper.setProps({ commands: [commands[0]] })
     await textarea.trigger('keydown', { key: 'Enter' })
     expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('/review ')
+  })
+})
+
+describe('ComposerBox clipboard attachments', () => {
+  it('Cmd+V 粘贴截图时生成临时文件并添加为附件', async () => {
+    saveClipboardFile.mockResolvedValueOnce('/tmp/claude-desk/clipboard/pasted-image.png')
+    const wrapper = mountComposer()
+    const image = {
+      name: '',
+      type: 'image/png',
+      arrayBuffer: vi.fn().mockResolvedValue(Uint8Array.from([137, 80, 78, 71]).buffer),
+    } as unknown as File
+
+    await wrapper.find('textarea').trigger('paste', {
+      clipboardData: {
+        items: [{ kind: 'file', getAsFile: () => image }],
+      },
+    })
+    await flushPromises()
+
+    expect(saveClipboardFile).toHaveBeenCalledWith('', 'image/png', [137, 80, 78, 71])
+    expect(wrapper.find('.attachment-name').text()).toBe('pasted-image.png')
+  })
+
+  it('粘贴普通文本时不生成文件', async () => {
+    saveClipboardFile.mockClear()
+    const wrapper = mountComposer()
+
+    await wrapper.find('textarea').trigger('paste', {
+      clipboardData: {
+        items: [{ kind: 'string', getAsFile: () => null }],
+      },
+    })
+    await flushPromises()
+
+    expect(saveClipboardFile).not.toHaveBeenCalled()
+    expect(wrapper.find('.attachment-chip').exists()).toBe(false)
   })
 })
