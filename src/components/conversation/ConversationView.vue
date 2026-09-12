@@ -16,7 +16,7 @@ import QuestionCard from '../permissions/QuestionCard.vue'
 import InlineError from '../common/InlineError.vue'
 
 type RenderItem =
-  | { type: 'message'; key: string; role: 'user' | 'assistant'; text: string; streaming?: boolean }
+  | { type: 'message'; key: string; role: 'user' | 'assistant'; text: string; streaming?: boolean; createdAt?: string; turnStartedAt?: number; turnDurationMs?: number | null }
   | { type: 'tool'; key: string; name: string; input: unknown; output?: unknown; isError?: boolean; finished: boolean }
   | { type: 'permission'; key: string; requestId: string; toolName: string; input: unknown; suggestions: unknown[] }
   | { type: 'question'; key: string; requestId: string; questions: Extract<TaskEvent, { kind: 'question_requested' }>['data']['questions'] }
@@ -40,7 +40,25 @@ const emit = defineEmits<{ stop: []; 'open-settings': []; 'task-updated': [task:
 const error = ref('')
 const scroll = ref<HTMLElement | null>(null)
 const active = computed(() => ['starting', 'running', 'awaiting_permission', 'stopping'].includes(props.task.status))
-const { t } = useI18n()
+const { t, language } = useI18n()
+
+// 对话时间分隔线：今天只显示时刻，跨天补日期，按界面语言格式化。
+const turnTimeFormatter = computed(() => {
+  const locale = language.value === 'en-US' ? 'en-US' : 'zh-CN'
+  return {
+    time: new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }),
+    dateTime: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    fullDate: new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+  }
+})
+
+function formatTurnTime(iso: string) {
+  const date = new Date(iso)
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) return turnTimeFormatter.value.time.format(date)
+  if (date.getFullYear() === now.getFullYear()) return turnTimeFormatter.value.dateTime.format(date)
+  return turnTimeFormatter.value.fullDate.format(date)
+}
 const unavailable = async () => { throw new Error('消息操作不可用') }
 
 const dialog = ref<SlashDialogKind | null>(null)
@@ -106,13 +124,20 @@ const items = computed<RenderItem[]>(() => {
   const currentAssistantByRun = new Map<string, Extract<RenderItem, { type: 'message' }>>()
   const tools = new Map<string, Extract<RenderItem, { type: 'tool' }>>()
   const resolved = new Set(props.events.filter((event) => event.kind === 'permission_resolved').map((event) => event.data.requestId))
+  // 每轮起止时间：runId 首个事件作为轮次起点，result 事件作为终点（用于总耗时）。
+  const runStart = new Map<string, number>()
+  const runDuration = new Map<string, number>()
+  for (const event of props.events) {
+    if (!runStart.has(event.runId)) runStart.set(event.runId, Date.parse(event.createdAt))
+    if (event.kind === 'result' && runStart.has(event.runId)) runDuration.set(event.runId, Date.parse(event.createdAt) - (runStart.get(event.runId) ?? 0))
+  }
   for (const event of props.events) {
     switch (event.kind) {
-      case 'user_message': result.push({ type: 'message', key: `${event.runId}:${event.sequence}`, role: 'user', text: event.data.text }); break
+      case 'user_message': result.push({ type: 'message', key: `${event.runId}:${event.sequence}`, role: 'user', text: event.data.text, createdAt: event.createdAt }); break
       case 'assistant_delta': {
         let item = messages.get(event.data.messageId) ?? currentAssistantByRun.get(event.runId)
         if (!item || !item.streaming) {
-          item = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: '', streaming: true }
+          item = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: '', streaming: true, turnStartedAt: runStart.get(event.runId), turnDurationMs: runDuration.get(event.runId) ?? null }
           currentAssistantByRun.set(event.runId, item)
           result.push(item)
         }
@@ -123,7 +148,7 @@ const items = computed<RenderItem[]>(() => {
       case 'assistant_message': {
         const item = messages.get(event.data.messageId) ?? currentAssistantByRun.get(event.runId)
         if (item) { item.text = event.data.markdown; item.streaming = false; messages.set(event.data.messageId, item) }
-        else { const created: Extract<RenderItem, { type: 'message' }> = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: event.data.markdown }; messages.set(event.data.messageId, created); result.push(created) }
+        else { const created: Extract<RenderItem, { type: 'message' }> = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: event.data.markdown, turnStartedAt: runStart.get(event.runId), turnDurationMs: runDuration.get(event.runId) ?? null }; messages.set(event.data.messageId, created); result.push(created) }
         currentAssistantByRun.delete(event.runId)
         break
       }
@@ -159,7 +184,8 @@ watch(() => props.events.length, async () => { await nextTick(); if (scroll.valu
       <div v-if="!items.length" class="conversation-empty"><span>✳</span><h2>{{ t('startTask') }}</h2><p>{{ t('startTaskHelp') }}</p></div>
       <div v-else class="timeline">
         <template v-for="item in items" :key="item.key">
-          <MessageBubble v-if="item.type === 'message'" :role="item.role" :text="item.text" :streaming="item.streaming" />
+          <div v-if="item.type === 'message' && item.role === 'user' && item.createdAt" class="turn-time">{{ formatTurnTime(item.createdAt) }}</div>
+          <MessageBubble v-if="item.type === 'message'" :role="item.role" :text="item.text" :streaming="item.streaming" :turn-started-at="item.turnStartedAt" :turn-duration-ms="item.turnDurationMs" />
           <ToolCard v-else-if="item.type === 'tool'" :name="item.name" :input="item.input" :output="item.output" :is-error="item.isError" :finished="item.finished" />
           <div v-else-if="item.type === 'cli'" class="cli-output"><span class="cli-badge">{{ t('cliOutputLabel') }}</span><pre>{{ item.content }}</pre></div>
           <PermissionCard v-else-if="item.type === 'permission'" :tool-name="item.toolName" :input="item.input" :suggestions="item.suggestions" @resolve="resolve(item.requestId, $event)" />
@@ -177,7 +203,7 @@ watch(() => props.events.length, async () => { await nextTick(); if (scroll.valu
 </template>
 
 <style scoped>
-.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.event-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
+.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.turn-time { margin: 20px 0 2px; color: var(--text-muted); font-size: 10px; text-align: center; user-select: none; }.timeline .turn-time:first-child { margin-top: 0; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.event-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
 .cli-output { display: flex; gap: 10px; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-header); }.cli-badge { flex: none; height: fit-content; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 700; }.cli-output pre { min-width: 0; flex: 1; margin: 0; overflow: auto; color: var(--text-secondary); font: 11px/1.6 var(--font-mono); white-space: pre-wrap; }
 @media (max-width: 720px) { .timeline { width: calc(100% - 28px); padding-top: 18px; } }
 </style>

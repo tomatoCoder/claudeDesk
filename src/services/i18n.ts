@@ -39,6 +39,10 @@ const zhCN = {
   startTaskHelp: '消息会在此实时显示。文件修改仍发生在你选择的本地项目中。',
   workspaceConflict: '当前项目有 {{count}} 个并行任务，可能同时修改同一文件。',
   turnComplete: '本轮完成',
+  turnDuration: '总耗时',
+  turnDurationSeconds: '用时{{s}}秒',
+  turnDurationMinutes: '用时{{m}}分{{s}}秒',
+  turnDurationHours: '用时{{h}}小时{{m}}分{{s}}秒',
   turns: '{{count}} 轮',
   claudeWorking: 'Claude 正在工作…',
   sendTaskPlaceholder: '给 Claude Code 发送任务…',
@@ -190,6 +194,10 @@ const enUS: Record<TranslationKey, string> = {
   startTaskHelp: 'Messages appear here in real time. File changes stay in the local project you selected.',
   workspaceConflict: '{{count}} tasks are running in this project and may edit the same files.',
   turnComplete: 'Turn completed',
+  turnDuration: 'Turn duration',
+  turnDurationSeconds: '{{s}}s',
+  turnDurationMinutes: '{{m}}m {{s}}s',
+  turnDurationHours: '{{h}}h {{m}}m {{s}}s',
   turns: '{{count}} turns',
   claudeWorking: 'Claude is working…',
   sendTaskPlaceholder: 'Send a task to Claude Code…',
@@ -315,5 +323,5 @@ export function translate(key: TranslationKey, params: Record<string, string | n
 }
 
 export function useI18n() {
-  return { t: translate }
+  return { t: translate, language: currentLanguage }
 }
