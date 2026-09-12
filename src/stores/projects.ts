@@ -81,6 +81,12 @@ export const useProjectsStore = defineStore('projects', () => {
     if (task) { task.status = status; task.updatedAt = new Date().toISOString() }
   }
 
+  // 用后端返回的最新 TaskDto 整体替换本地副本（如 /model、/permissions 覆盖设置后）。
+  function patchTask(task: TaskDto) {
+    const index = tasks.value.findIndex((item) => item.id === task.id)
+    if (index >= 0) tasks.value.splice(index, 1, task)
+  }
+
   async function refreshDiagnostic() { cli.value = await ipc.diagnoseClaude() }
 
   async function persistSettings(value: AppSettingsDto) {
@@ -89,5 +95,5 @@ export const useProjectsStore = defineStore('projects', () => {
     if (settings.value.claudePath !== previousClaudePath) await refreshDiagnostic()
   }
 
-  return { projects, tasks, settings, cli, selectedProjectId, selectedTaskId, selectedProject, selectedTask, hydrate, selectProject, selectTask, addProject, createTask, renameTask, removeProject, updateTaskStatus, refreshDiagnostic, persistSettings }
+  return { projects, tasks, settings, cli, selectedProjectId, selectedTaskId, selectedProject, selectedTask, hydrate, selectProject, selectTask, addProject, createTask, renameTask, removeProject, updateTaskStatus, patchTask, refreshDiagnostic, persistSettings }
 })

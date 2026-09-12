@@ -13,6 +13,8 @@ export interface TaskDto {
   projectId: string
   title: string
   claudeSessionId: string | null
+  modelOverride: string | null
+  permissionModeOverride: TaskPermissionMode | null
   status: TaskStatus
   createdAt: string
   updatedAt: string
@@ -31,6 +33,31 @@ export type ThemePreference = 'system' | 'dark' | 'light'
 export type AppLanguage = 'zh-CN' | 'en-US'
 export type ProjectOpenWith = 'default' | 'qoder' | 'vscode' | 'intellij_idea'
 export type AppPermissionMode = 'default' | 'auto' | 'bypass'
+export type TaskPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'dontAsk'
+
+export interface SlashCommandDto {
+  name: string
+  description: string
+  argumentHint: string
+  aliases: string[]
+}
+
+export interface ModelInfoDto {
+  value: string
+  displayName: string
+  description: string
+  resolvedModel: string | null
+}
+
+export interface SlashCommandCatalogDto {
+  commands: SlashCommandDto[]
+  models: ModelInfoDto[]
+}
+
+export interface SlashCommandsChanged {
+  projectId: string
+  catalog: SlashCommandCatalogDto
+}
 
 export interface ManagedClaudeSettings {
   authToken: string

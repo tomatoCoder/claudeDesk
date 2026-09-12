@@ -1,13 +1,13 @@
-pub mod claude;
 pub mod bridge;
+pub mod claude;
 pub mod commands;
 pub mod diagnostics;
 pub mod domain;
 pub mod error;
 pub mod permission;
 pub mod process;
-pub mod settings;
 pub mod sessions;
+pub mod settings;
 pub mod storage;
 pub mod task;
 
@@ -85,6 +85,9 @@ pub fn run() {
             commands::tasks::send_queued_turn,
             commands::tasks::cancel_task,
             commands::permissions::resolve_permission,
+            commands::slash_commands::list_slash_commands,
+            commands::slash_commands::set_task_model,
+            commands::slash_commands::set_task_permission_mode,
             commands::diagnostics::diagnose_claude,
         ])
         .run(tauri::generate_context!())

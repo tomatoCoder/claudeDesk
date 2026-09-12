@@ -3,11 +3,15 @@ pub mod diagnostics;
 pub mod drag;
 pub mod permissions;
 pub mod projects;
-pub mod settings;
 pub mod sessions;
+pub mod settings;
+pub mod slash_commands;
 pub mod tasks;
 
-use crate::{diagnostics::LogStore, permission::PermissionHub, settings::SettingsRepository, storage::Storage, task::TaskCoordinator};
+use crate::{
+    diagnostics::LogStore, permission::PermissionHub, settings::SettingsRepository,
+    storage::Storage, task::TaskCoordinator,
+};
 
 pub struct AppState {
     pub storage: Storage,

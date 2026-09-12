@@ -4,11 +4,16 @@ use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::{
-    domain::{AppSettingsDto, ProjectDto, TaskDto, TaskEvent, TaskEventPayload, TaskStatus},
+    domain::{
+        AppSettingsDto, ProjectDto, TaskDto, TaskEvent, TaskEventPayload, TaskPermissionMode,
+        TaskStatus,
+    },
     error::AppError,
 };
 
 use super::migrations::migrate;
+
+const TASK_COLUMNS: &str = "id,project_id,title,claude_session_id,status,model_override,permission_mode_override,created_at,updated_at";
 
 #[derive(Clone)]
 pub struct Storage {
@@ -111,11 +116,14 @@ impl Storage {
         updated_at: &str,
     ) -> Result<TaskDto, AppError> {
         self.get_project(project_id)?;
-        uuid::Uuid::parse_str(session_id).map_err(|_| {
-            AppError::new("invalid_session_id", "Claude 会话标识无效", false)
-        })?;
+        uuid::Uuid::parse_str(session_id)
+            .map_err(|_| AppError::new("invalid_session_id", "Claude 会话标识无效", false))?;
         let title = title.trim();
-        let title = if title.is_empty() { "未命名会话" } else { title };
+        let title = if title.is_empty() {
+            "未命名会话"
+        } else {
+            title
+        };
         let connection = self.connection.lock();
         if let Some(id) = connection
             .query_row(
@@ -142,14 +150,17 @@ impl Storage {
     }
 
     pub fn get_task(&self, id: &str) -> Result<TaskDto, AppError> {
-        self.connection.lock().query_row(
-            "SELECT id,project_id,title,claude_session_id,status,created_at,updated_at FROM tasks WHERE id=?1", [id], task_from_row,
-        ).map_err(|_| AppError::new("task_not_found", "任务不存在", true))
+        let sql = format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id=?1");
+        self.connection
+            .lock()
+            .query_row(sql.as_str(), [id], task_from_row)
+            .map_err(|_| AppError::new("task_not_found", "任务不存在", true))
     }
 
     pub fn list_tasks(&self) -> Result<Vec<TaskDto>, AppError> {
         let connection = self.connection.lock();
-        let mut statement = connection.prepare("SELECT id,project_id,title,claude_session_id,status,created_at,updated_at FROM tasks ORDER BY updated_at DESC")?;
+        let sql = format!("SELECT {TASK_COLUMNS} FROM tasks ORDER BY updated_at DESC");
+        let mut statement = connection.prepare(sql.as_str())?;
         let tasks = statement
             .query_map([], task_from_row)?
             .collect::<Result<Vec<_>, _>>()?;
@@ -158,7 +169,10 @@ impl Storage {
 
     pub fn list_project_tasks(&self, project_id: &str) -> Result<Vec<TaskDto>, AppError> {
         let connection = self.connection.lock();
-        let mut statement = connection.prepare("SELECT id,project_id,title,claude_session_id,status,created_at,updated_at FROM tasks WHERE project_id=?1 ORDER BY updated_at DESC")?;
+        let sql = format!(
+            "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id=?1 ORDER BY updated_at DESC"
+        );
+        let mut statement = connection.prepare(sql.as_str())?;
         let tasks = statement
             .query_map([project_id], task_from_row)?
             .collect::<Result<Vec<_>, _>>()?;
@@ -173,6 +187,34 @@ impl Storage {
         self.connection.lock().execute(
             "UPDATE tasks SET title=?1, updated_at=?2 WHERE id=?3",
             params![title, chrono::Utc::now().to_rfc3339(), id],
+        )?;
+        self.get_task(id)
+    }
+
+    pub fn set_task_model_override(
+        &self,
+        id: &str,
+        model: Option<&str>,
+    ) -> Result<TaskDto, AppError> {
+        self.connection.lock().execute(
+            "UPDATE tasks SET model_override=?1, updated_at=?2 WHERE id=?3",
+            params![model, chrono::Utc::now().to_rfc3339(), id],
+        )?;
+        self.get_task(id)
+    }
+
+    pub fn set_task_permission_mode_override(
+        &self,
+        id: &str,
+        mode: Option<TaskPermissionMode>,
+    ) -> Result<TaskDto, AppError> {
+        self.connection.lock().execute(
+            "UPDATE tasks SET permission_mode_override=?1, updated_at=?2 WHERE id=?3",
+            params![
+                mode.as_ref().map(TaskPermissionMode::as_str),
+                chrono::Utc::now().to_rfc3339(),
+                id
+            ],
         )?;
         self.get_task(id)
     }
@@ -301,13 +343,18 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectDto> {
 
 fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskDto> {
     let status: String = row.get(4)?;
+    let permission_mode_override: Option<String> = row.get(6)?;
     Ok(TaskDto {
         id: row.get(0)?,
         project_id: row.get(1)?,
         title: row.get(2)?,
         claude_session_id: row.get(3)?,
         status: TaskStatus::parse(&status),
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
+        model_override: row.get(5)?,
+        permission_mode_override: permission_mode_override
+            .as_deref()
+            .and_then(TaskPermissionMode::parse),
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }

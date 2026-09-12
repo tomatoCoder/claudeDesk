@@ -2,10 +2,15 @@ use std::{path::PathBuf, time::Duration};
 
 use serde_json::Value;
 use tauri::AppHandle;
-use tauri_plugin_shell::{process::{Command, CommandChild, CommandEvent}, ShellExt};
+use tauri_plugin_shell::{
+    process::{Command, CommandChild, CommandEvent},
+    ShellExt,
+};
 
+use crate::domain::{
+    ModelInfoDto, SlashCommandCatalogDto, SlashCommandDto, TaskEventPayload, TaskStatus,
+};
 use crate::error::AppError;
-use crate::domain::{TaskEventPayload, TaskStatus};
 
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const BRIDGE_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -33,7 +38,11 @@ pub async fn request(app: &AppHandle, payload: &Value) -> Result<Value, AppError
                 let size = chunks.iter().map(Vec::len).sum::<usize>() + bytes.len();
                 if size > MAX_RESPONSE_BYTES {
                     let _ = child.kill();
-                    return Err(AppError::new("bridge_response_too_large", "Bridge 响应超过 4 MiB", false));
+                    return Err(AppError::new(
+                        "bridge_response_too_large",
+                        "Bridge 响应超过 4 MiB",
+                        false,
+                    ));
                 }
                 let has_complete_event = bytes.contains(&b'\n');
                 chunks.push(bytes);
@@ -45,13 +54,20 @@ pub async fn request(app: &AppHandle, payload: &Value) -> Result<Value, AppError
             }
             CommandEvent::Stderr(bytes) => stderr.extend(bytes),
             CommandEvent::Error(message) => {
-                return Err(AppError::new("bridge_process_error", redact(&message), true));
+                return Err(AppError::new(
+                    "bridge_process_error",
+                    redact(&message),
+                    true,
+                ));
             }
             CommandEvent::Terminated(status) => {
                 if status.code != Some(0) && chunks.is_empty() {
                     return Err(AppError::new(
                         "bridge_exit_error",
-                        format!("Agent Bridge 异常退出：{}", redact(&String::from_utf8_lossy(&stderr))),
+                        format!(
+                            "Agent Bridge 异常退出：{}",
+                            redact(&String::from_utf8_lossy(&stderr))
+                        ),
                         true,
                     ));
                 }
@@ -102,7 +118,11 @@ pub fn decode_single_event(chunks: Vec<Vec<u8>>) -> Result<Value, AppError> {
         .find(|line| line.iter().any(|byte| !byte.is_ascii_whitespace()))
         .ok_or_else(|| AppError::new("bridge_empty_response", "Bridge 没有返回事件", true))?;
     let value: Value = serde_json::from_slice(line).map_err(|error| {
-        AppError::new("bridge_invalid_json", format!("Bridge 返回无效 JSON：{error}"), true)
+        AppError::new(
+            "bridge_invalid_json",
+            format!("Bridge 返回无效 JSON：{error}"),
+            true,
+        )
     })?;
     if value.get("v").and_then(Value::as_u64) != Some(1) {
         return Err(AppError::new(
@@ -113,9 +133,20 @@ pub fn decode_single_event(chunks: Vec<Vec<u8>>) -> Result<Value, AppError> {
     }
     if value.get("type") == Some(&Value::String("bridge.error".into())) {
         return Err(AppError::new(
-            value.get("code").and_then(Value::as_str).unwrap_or("bridge_error"),
-            redact(value.get("message").and_then(Value::as_str).unwrap_or("Agent Bridge 执行失败")),
-            value.get("recoverable").and_then(Value::as_bool).unwrap_or(true),
+            value
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or("bridge_error"),
+            redact(
+                value
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Agent Bridge 执行失败"),
+            ),
+            value
+                .get("recoverable")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
         ));
     }
     Ok(value)
@@ -128,7 +159,12 @@ fn redact(value: &str) -> String {
     }
     let mut result = String::with_capacity(value.len());
     for token in value.split_whitespace() {
-        if token.starts_with("sk-") || token.len() > 40 && token.chars().all(|ch| ch.is_ascii_alphanumeric() || "_-".contains(ch)) {
+        if token.starts_with("sk-")
+            || token.len() > 40
+                && token
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || "_-".contains(ch))
+        {
             result.push_str("[REDACTED]");
         } else {
             result.push_str(token);
@@ -165,11 +201,23 @@ pub fn bridge_exit_error(code: Option<i32>, stderr: &[u8]) -> AppError {
 
 pub fn event_to_payload(value: &Value) -> Result<Option<TaskEventPayload>, AppError> {
     let text = |key: &str| {
-        value.get(key).and_then(Value::as_str).map(str::to_owned).ok_or_else(|| {
-            AppError::new("bridge_event_invalid", format!("Bridge 事件缺少 {key}"), true)
-        })
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                AppError::new(
+                    "bridge_event_invalid",
+                    format!("Bridge 事件缺少 {key}"),
+                    true,
+                )
+            })
     };
-    let payload = match value.get("type").and_then(Value::as_str).unwrap_or_default() {
+    let payload = match value
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+    {
         "assistant.delta" => Some(TaskEventPayload::AssistantDelta {
             message_id: text("messageId")?,
             text: text("text")?,
@@ -186,27 +234,129 @@ pub fn event_to_payload(value: &Value) -> Result<Option<TaskEventPayload>, AppEr
         "tool.finished" => Some(TaskEventPayload::ToolFinished {
             tool_use_id: text("toolUseId")?,
             output: value.get("output").cloned().unwrap_or(Value::Null),
-            is_error: value.get("isError").and_then(Value::as_bool).unwrap_or(false),
+            is_error: value
+                .get("isError")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }),
+        "local_command_output" => Some(TaskEventPayload::LocalCommandOutput {
+            content: text("content")?,
         }),
         "run.result" => Some(TaskEventPayload::Result {
-            session_id: value.get("sessionId").and_then(Value::as_str).unwrap_or_default().into(),
+            session_id: value
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into(),
             cost_usd: value.get("costUsd").and_then(Value::as_f64),
             turns: value.get("turns").and_then(Value::as_u64),
         }),
         "run.retry" => Some(TaskEventPayload::Error {
             code: "api_retry".into(),
-            message: value.get("message").and_then(Value::as_str).unwrap_or("Claude API 正在重试").into(),
+            message: value
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("Claude API 正在重试")
+                .into(),
             recoverable: true,
         }),
         "run.error" => Some(TaskEventPayload::Error {
-            code: value.get("code").and_then(Value::as_str).unwrap_or("sdk_query_failed").into(),
-            message: redact(value.get("message").and_then(Value::as_str).unwrap_or("Agent Bridge 执行失败")),
-            recoverable: value.get("recoverable").and_then(Value::as_bool).unwrap_or(true),
+            code: value
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or("sdk_query_failed")
+                .into(),
+            message: redact(
+                value
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Agent Bridge 执行失败"),
+            ),
+            recoverable: value
+                .get("recoverable")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
         }),
         "run.status" => Some(TaskEventPayload::StatusChanged {
-            status: TaskStatus::parse(value.get("status").and_then(Value::as_str).unwrap_or("idle")),
+            status: TaskStatus::parse(
+                value
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("idle"),
+            ),
         }),
         _ => None,
     };
     Ok(payload)
+}
+
+pub fn parse_slash_catalog(value: &Value) -> Result<SlashCommandCatalogDto, AppError> {
+    let commands_json = value
+        .get("commands")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::new("bridge_event_invalid", "命令目录缺少 commands 数组", true))?;
+    let models_json = value
+        .get("models")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::new("bridge_event_invalid", "命令目录缺少 models 数组", true))?;
+    let mut commands = Vec::new();
+    for command in commands_json {
+        let Some(name) = command.get("name").and_then(Value::as_str).map(str::trim) else {
+            continue;
+        };
+        if name.is_empty() {
+            continue;
+        }
+        commands.push(SlashCommandDto {
+            name: name.into(),
+            description: command
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into(),
+            argument_hint: command
+                .get("argumentHint")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into(),
+            aliases: command
+                .get("aliases")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default(),
+        });
+    }
+    let mut models = Vec::new();
+    for model in models_json {
+        let Some(model_value) = model.get("value").and_then(Value::as_str).map(str::trim) else {
+            continue;
+        };
+        if model_value.is_empty() {
+            continue;
+        }
+        models.push(ModelInfoDto {
+            value: model_value.into(),
+            display_name: model
+                .get("displayName")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into(),
+            description: model
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into(),
+            resolved_model: model
+                .get("resolvedModel")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        });
+    }
+    Ok(SlashCommandCatalogDto { commands, models })
 }

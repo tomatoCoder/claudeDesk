@@ -319,7 +319,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
           <div v-if="claudeSettings?.values.model" class="model-chip" :title="t('newSessionDefaultModel')">{{ claudeSettings.values.model }}</div>
         </header>
         <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
-        <ConversationView :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" />
+        <ConversationView :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
       </template>
       <EmptyState v-else-if="!initialising && !projects.projects.length" :title="t('emptyTitle')" :description="t('emptyDescription')" :action="t('addLocalProject')" @action="addProject" />
       <EmptyState v-else-if="!initialising" :title="t('newTaskTitle')" :description="t('newTaskDescription')" :action="t('newTaskTitle')" @action="projects.selectedProjectId && createTask(projects.selectedProjectId)" />

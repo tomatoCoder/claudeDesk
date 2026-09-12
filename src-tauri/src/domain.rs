@@ -128,6 +128,9 @@ pub enum TaskEventPayload {
         cost_usd: Option<f64>,
         turns: Option<u64>,
     },
+    LocalCommandOutput {
+        content: String,
+    },
     Error {
         code: String,
         message: String,
@@ -152,6 +155,7 @@ impl TaskEventPayload {
             Self::WorkspaceConflict { .. } => "workspace_conflict",
             Self::StatusChanged { .. } => "status_changed",
             Self::Result { .. } => "result",
+            Self::LocalCommandOutput { .. } => "local_command_output",
             Self::Error { .. } => "error",
             Self::Unknown { .. } => "unknown",
         }
@@ -206,6 +210,8 @@ pub struct TaskDto {
     pub title: String,
     pub claude_session_id: Option<String>,
     pub status: TaskStatus,
+    pub model_override: Option<String>,
+    pub permission_mode_override: Option<TaskPermissionMode>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -260,6 +266,36 @@ pub enum AppPermissionMode {
     Default,
     Auto,
     Bypass,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskPermissionMode {
+    Default,
+    AcceptEdits,
+    Plan,
+    DontAsk,
+}
+
+impl TaskPermissionMode {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "default" => Some(Self::Default),
+            "acceptEdits" => Some(Self::AcceptEdits),
+            "plan" => Some(Self::Plan),
+            "dontAsk" => Some(Self::DontAsk),
+            _ => None,
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::AcceptEdits => "acceptEdits",
+            Self::Plan => "plan",
+            Self::DontAsk => "dontAsk",
+        }
+    }
 }
 
 impl Default for AppSettingsDto {
@@ -352,4 +388,36 @@ pub struct WorkspaceDiff {
     pub files: Vec<GitFileStatus>,
     pub patch: String,
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SlashCommandDto {
+    pub name: String,
+    pub description: String,
+    pub argument_hint: String,
+    pub aliases: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfoDto {
+    pub value: String,
+    pub display_name: String,
+    pub description: String,
+    pub resolved_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SlashCommandCatalogDto {
+    pub commands: Vec<SlashCommandDto>,
+    pub models: Vec<ModelInfoDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlashCommandsChanged {
+    pub project_id: String,
+    pub catalog: SlashCommandCatalogDto,
 }

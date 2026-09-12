@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, QueuedTurnDto, RunAccepted, TaskDto, TurnSubmission } from '../domain/models'
+import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, QueuedTurnDto, RunAccepted, SlashCommandCatalogDto, TaskDto, TurnSubmission } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
 import { translate } from './i18n'
 
@@ -32,6 +32,9 @@ export const ipc = {
   adjustQueuedTurn: (taskId: string, queuedTurnId: string) => invoke<void>('adjust_queued_turn', { taskId, queuedTurnId }),
   sendQueuedTurn: (taskId: string, queuedTurnId: string) => invoke<RunAccepted>('send_queued_turn', { taskId, queuedTurnId }),
   cancelTask: (taskId: string) => invoke<void>('cancel_task', { taskId }),
+  listSlashCommands: (projectId: string, force?: boolean) => invoke<SlashCommandCatalogDto>('list_slash_commands', { projectId, force }),
+  setTaskModel: (taskId: string, model: string) => invoke<TaskDto>('set_task_model', { taskId, model }),
+  setTaskPermissionMode: (taskId: string, mode: string) => invoke<TaskDto>('set_task_permission_mode', { taskId, mode }),
   resolvePermission: (taskId: string, requestId: string, decision: string, updatedInput: unknown, permissionUpdate?: unknown) =>
     invoke<void>('resolve_permission', { taskId, requestId, decision, updatedInput, permissionUpdate }),
   diagnoseClaude: () => invoke<CliDiagnosticDto>('diagnose_claude'),
