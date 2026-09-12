@@ -2,6 +2,7 @@ pub mod application;
 pub mod clipboard;
 pub mod diagnostics;
 pub mod drag;
+pub mod files;
 pub mod permissions;
 pub mod projects;
 pub mod sessions;

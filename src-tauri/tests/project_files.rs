@@ -1,5 +1,6 @@
 use claude_desk_lib::{
-    domain::ProjectFilePreviewKind,
+    commands::files::{list_project_directory, read_project_file, search_project_files},
+    domain::{ProjectFileEntry, ProjectFileKind, ProjectFilePreview, ProjectFilePreviewKind},
     files::{list_directory, read_preview, search_files},
 };
 use std::process::Command;
@@ -137,4 +138,49 @@ fn searches_non_git_projects_with_limits_and_skips_dependency_directories() {
         .all(|entry| !entry.path.starts_with("node_modules/")));
     assert_eq!(limited.len(), 1);
     assert_eq!(limited[0].path, "src/main.rs");
+}
+
+#[test]
+fn serialization_contract_uses_camel_case_fields_and_snake_case_kinds() {
+    let entry = ProjectFileEntry {
+        name: "README.md".to_string(),
+        path: "docs/README.md".to_string(),
+        kind: ProjectFileKind::File,
+        extension: Some("md".to_string()),
+    };
+    let preview = ProjectFilePreview {
+        path: "large.bin".to_string(),
+        kind: ProjectFilePreviewKind::TooLarge,
+        mime_type: None,
+        content: None,
+        bytes: None,
+        size: 2_097_153,
+    };
+
+    assert_eq!(
+        serde_json::to_value(entry).unwrap(),
+        serde_json::json!({
+            "name": "README.md",
+            "path": "docs/README.md",
+            "kind": "file",
+            "extension": "md"
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(preview).unwrap(),
+        serde_json::json!({
+            "path": "large.bin",
+            "kind": "too_large",
+            "mimeType": null,
+            "content": null,
+            "bytes": null,
+            "size": 2_097_153
+        })
+    );
+
+    let _commands = (
+        list_project_directory,
+        search_project_files,
+        read_project_file,
+    );
 }
