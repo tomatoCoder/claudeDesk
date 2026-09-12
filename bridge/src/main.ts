@@ -13,7 +13,7 @@ import { buildQueryOptions, normalizeSdkMessage } from './agent-adapter.js'
 import { normalizeSession, normalizeSessionMessage } from './catalog.js'
 import { discoverCommandCatalog } from './commands.js'
 import { parseBridgeRequest, parseRunControl, serializeBridgeEvent, type BridgeEvent, type BridgeRequest, type CommandsRequest, type RunStartRequest } from './protocol.js'
-import { applyRunControl, RunInput } from './run-input.js'
+import { applyRunControlWithReceipt, RunInput } from './run-input.js'
 
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
 const lines = input[Symbol.asyncIterator]()
@@ -75,6 +75,7 @@ async function handleRun(request: RunStartRequest) {
   const nextSequence = () => ++sequence
   const abortController = new AbortController()
   const pending = new Map<string, (decision: PermissionResult) => void>()
+  const adjustmentReceipts = new Set<Promise<void>>()
   const runInput = new RunInput(request.prompt, randomUUID())
   const canUseTool: CanUseTool = (toolName, input, context) => new Promise((resolve) => {
     const permissionId = randomUUID()
@@ -99,7 +100,8 @@ async function handleRun(request: RunStartRequest) {
     }, { once: true })
   })
 
-  const controlPump = consumeControls(request, pending, abortController, runInput, nextSequence)
+  const controlPump = consumeControls(request, pending, adjustmentReceipts, abortController, runInput, nextSequence)
+  let terminalEvent: (() => BridgeEvent) | undefined
   write({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), status: 'running' })
   try {
     const options = buildQueryOptions(request)
@@ -112,9 +114,12 @@ async function handleRun(request: RunStartRequest) {
       }
       if (isRecord(sdkMessage) && sdkMessage.type === 'result') runInput.close()
     }
-    write({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), status: abortController.signal.aborted ? 'interrupted' : 'completed' })
+    const status = abortController.signal.aborted ? 'interrupted' : 'completed'
+    terminalEvent = () => ({ v: 1, type: 'run.status', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), status })
   } catch (error) {
-    write({ v: 1, type: 'run.error', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), code: abortController.signal.aborted ? 'RUN_STOPPED' : 'SDK_QUERY_FAILED', message: redact(errorMessage(error)), recoverable: true })
+    const code = abortController.signal.aborted ? 'RUN_STOPPED' : 'SDK_QUERY_FAILED'
+    const message = redact(errorMessage(error))
+    terminalEvent = () => ({ v: 1, type: 'run.error', requestId: request.requestId, runId: request.runId, sequence: nextSequence(), code, message, recoverable: true })
   } finally {
     for (const resolve of pending.values()) resolve({ behavior: 'deny', message: 'Bridge 已结束' })
     pending.clear()
@@ -122,6 +127,9 @@ async function handleRun(request: RunStartRequest) {
     input.close()
     process.stdin.destroy()
     await controlPump
+    runInput.finish()
+    await Promise.allSettled(adjustmentReceipts)
+    if (terminalEvent) write(terminalEvent())
     process.stdout.end()
   }
 }
@@ -129,6 +137,7 @@ async function handleRun(request: RunStartRequest) {
 async function consumeControls(
   request: RunStartRequest,
   pending: Map<string, (decision: PermissionResult) => void>,
+  adjustmentReceipts: Set<Promise<void>>,
   abortController: AbortController,
   runInput: RunInput,
   nextSequence: () => number,
@@ -138,14 +147,21 @@ async function consumeControls(
     try { control = parseRunControl(line) } catch { continue }
     if (control.runId !== request.runId) continue
     if (control.type === 'run.adjust') {
-      const result = applyRunControl(runInput, control)
-      write({
-        v: 1,
-        ...result,
-        requestId: request.requestId,
-        runId: request.runId,
-        sequence: nextSequence(),
+      const receipt = applyRunControlWithReceipt(runInput, control)
+      const publication = receipt.result.then((result) => {
+        write({
+          v: 1,
+          ...result,
+          requestId: request.requestId,
+          runId: request.runId,
+          sequence: nextSequence(),
+        })
       })
+      adjustmentReceipts.add(publication)
+      void publication.then(
+        () => adjustmentReceipts.delete(publication),
+        () => adjustmentReceipts.delete(publication),
+      )
       continue
     }
     if (control.type === 'run.stop') {
