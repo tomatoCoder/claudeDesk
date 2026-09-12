@@ -146,3 +146,23 @@ export interface WorkspaceDiff {
   patch: string
   truncated: boolean
 }
+
+export type ProjectFileKind = 'file' | 'directory'
+
+export interface ProjectFileEntry {
+  name: string
+  path: string
+  kind: ProjectFileKind
+  extension: string | null
+}
+
+export type ProjectFilePreviewKind = 'text' | 'image' | 'binary' | 'too_large'
+
+export interface ProjectFilePreview {
+  path: string
+  kind: ProjectFilePreviewKind
+  mimeType: string | null
+  content: string | null
+  bytes: number[] | null
+  size: number
+}

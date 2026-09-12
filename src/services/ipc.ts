@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, QueuedTurnDto, RunAccepted, SlashCommandCatalogDto, TaskDto, TurnSubmission } from '../domain/models'
+import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, ProjectFileEntry, ProjectFilePreview, QueuedTurnDto, RunAccepted, SlashCommandCatalogDto, TaskDto, TurnSubmission } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
 import { translate } from './i18n'
 
@@ -22,6 +22,12 @@ export const ipc = {
   addProject: (path: string) => invoke<ProjectDto>('add_project', { path }),
   removeProject: (projectId: string) => invoke<void>('remove_project', { projectId }),
   openProject: (projectId: string) => invoke<void>('open_project', { projectId }),
+  listProjectDirectory: (projectId: string, path: string) =>
+    invoke<ProjectFileEntry[]>('list_project_directory', { projectId, path }),
+  searchProjectFiles: (projectId: string, query: string, limit = 200) =>
+    invoke<ProjectFileEntry[]>('search_project_files', { projectId, query, limit }),
+  readProjectFile: (projectId: string, path: string) =>
+    invoke<ProjectFilePreview>('read_project_file', { projectId, path }),
   createTask: (projectId: string, title?: string) => invoke<TaskDto>('create_task', { projectId, title }),
   renameTask: (taskId: string, title: string) => invoke<TaskDto>('rename_task', { taskId, title }),
   deleteTask: (taskId: string) => invoke<void>('delete_task', { taskId }),

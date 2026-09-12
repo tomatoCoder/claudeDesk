@@ -4,6 +4,7 @@ pub mod commands;
 pub mod diagnostics;
 pub mod domain;
 pub mod error;
+pub mod files;
 pub mod permission;
 pub mod process;
 pub mod sessions;
@@ -63,6 +64,9 @@ pub fn run() {
             commands::application::confirm_app_exit,
             commands::clipboard::save_clipboard_file,
             commands::drag::read_drag_file_paths,
+            commands::files::list_project_directory,
+            commands::files::search_project_files,
+            commands::files::read_project_file,
             commands::projects::get_snapshot,
             commands::projects::add_project,
             commands::projects::remove_project,

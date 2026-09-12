@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RefreshCw } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Files, RefreshCw } from 'lucide-vue-next'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { AppLanguage, AppPermissionMode, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, ThemePreference } from './domain/models'
 import { useProjectsStore } from './stores/projects'
@@ -10,12 +10,14 @@ import { listenToTaskEvents } from './services/taskEvents'
 import { listenToQueuedTurns } from './services/queuedTurns'
 import { applyTheme } from './services/theme'
 import { setAppLanguage, useI18n } from './services/i18n'
+import { isFilesShortcut } from './services/fileShortcut'
 import AppSidebar from './components/sidebar/AppSidebar.vue'
 import ConversationView from './components/conversation/ConversationView.vue'
 import SettingsView from './components/diagnostics/SettingsView.vue'
 import EmptyState from './components/common/EmptyState.vue'
 import InlineError from './components/common/InlineError.vue'
 import StatusPill from './components/common/StatusPill.vue'
+import FileBrowserDrawer from './components/files/FileBrowserDrawer.vue'
 
 const projects = useProjectsStore()
 const runtime = useRuntimeStore()
@@ -28,6 +30,9 @@ const settingsConflict = ref(false)
 const savingSettings = ref(false)
 const settingsError = ref('')
 const error = ref('')
+const filesOpen = ref(false)
+const filesWidth = ref(Math.min(960, Math.max(520, Number(localStorage.getItem('claude-desk:files-width')) || 680)))
+const filesDrawer = ref<InstanceType<typeof FileBrowserDrawer> | null>(null)
 let unlisten: UnlistenFn | undefined
 let settingsPoll: number | undefined
 let systemThemeQuery: MediaQueryList | undefined
@@ -52,6 +57,7 @@ watch(() => projects.settings.theme, (theme) => syncTheme(theme), { immediate: t
 watch(() => projects.settings.language, setAppLanguage, { immediate: true })
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleFilesShortcut)
   getSystemThemeQuery().addEventListener('change', handleSystemThemeChange)
   try {
     const unlistenTasks = await listenToTaskEvents((event) => {
@@ -74,10 +80,33 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleFilesShortcut)
   unlisten?.()
   if (settingsPoll) window.clearInterval(settingsPoll)
   systemThemeQuery?.removeEventListener('change', handleSystemThemeChange)
 })
+
+async function handleFilesShortcut(event: KeyboardEvent) {
+  const blocked = settingsOpen.value || !!document.querySelector('[role="dialog"]') || !projects.selectedProject
+  if (!isFilesShortcut(event, blocked)) return
+  event.preventDefault()
+  filesOpen.value = true
+  await nextTick()
+  await filesDrawer.value?.focusFilter()
+}
+
+async function toggleFiles() {
+  filesOpen.value = !filesOpen.value
+  if (filesOpen.value) {
+    await nextTick()
+    await filesDrawer.value?.focusFilter()
+  }
+}
+
+function resizeFiles(width: number) {
+  filesWidth.value = width
+  localStorage.setItem('claude-desk:files-width', String(width))
+}
 
 watch(() => projects.selectedTaskId, async (taskId) => {
   if (!taskId) return
@@ -158,6 +187,7 @@ async function stop() {
 }
 
 async function openSettings() {
+  filesOpen.value = false
   settingsOpen.value = true
   settingsDirty.value = false
   settingsConflict.value = false
@@ -317,9 +347,31 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
           <div class="task-heading"><h1>{{ projects.selectedTask.title }}</h1><StatusPill :status="projects.selectedTask.status" /></div>
           <div class="task-path" :title="projects.selectedProject?.path">{{ projects.selectedProject?.path }}</div>
           <div v-if="claudeSettings?.values.model" class="model-chip" :title="t('newSessionDefaultModel')">{{ claudeSettings.values.model }}</div>
+          <button
+            data-testid="files-button"
+            class="files-button"
+            :class="{ active: filesOpen }"
+            type="button"
+            :aria-pressed="filesOpen"
+            :title="`${t('files')} (⌘P / Ctrl+P)`"
+            @click="toggleFiles"
+          ><Files :size="15" />{{ t('files') }}</button>
         </header>
-        <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
-        <ConversationView :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
+        <div class="workspace-body">
+          <div class="conversation-pane">
+            <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
+            <ConversationView :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
+          </div>
+          <FileBrowserDrawer
+            v-if="filesOpen && projects.selectedProject"
+            ref="filesDrawer"
+            :project-id="projects.selectedProject.id"
+            :project-name="projects.selectedProject.name"
+            :width="filesWidth"
+            @close="filesOpen = false"
+            @resize="resizeFiles"
+          />
+        </div>
       </template>
       <EmptyState v-else-if="!initialising && !projects.projects.length" :title="t('emptyTitle')" :description="t('emptyDescription')" :action="t('addLocalProject')" @action="addProject" />
       <EmptyState v-else-if="!initialising" :title="t('newTaskTitle')" :description="t('newTaskDescription')" :action="t('newTaskTitle')" @action="projects.selectedProjectId && createTask(projects.selectedProjectId)" />
@@ -330,6 +382,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
 </template>
 
 <style scoped>
-.app-shell { display: grid; grid-template-columns: var(--sidebar-width, 280px) minmax(0,1fr); width: 100vw; height: 100vh; background: var(--surface-root); }.workspace { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; }.task-header { display: flex; height: 58px; flex: 0 0 58px; align-items: center; gap: 10px; padding: 0 16px 0 20px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); }.task-heading { min-width: 0; }.task-heading h1 { max-width: 300px; overflow: hidden; margin: 0 0 2px; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }.task-path { min-width: 0; flex: 1; overflow: hidden; color: var(--text-muted); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.model-chip { max-width: 210px; overflow: hidden; padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-secondary); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.cli-banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); font-size: 12px; }.cli-banner span { flex: 1; }.cli-banner button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: inherit; cursor: pointer; text-decoration: underline; }.loading-screen,.settings-loading { display: flex; flex: 1; align-items: center; justify-content: center; gap: 10px; color: var(--text-secondary); }.loading-screen span { color: var(--accent); font-size: 25px; }.global-error { position: absolute; z-index: 30; right: 16px; bottom: 14px; width: min(520px, calc(100% - 32px)); box-shadow: var(--shadow-lg); }
+.app-shell { display: grid; grid-template-columns: var(--sidebar-width, 280px) minmax(0,1fr); width: 100vw; height: 100vh; background: var(--surface-root); }.workspace { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; }.task-header { display: flex; height: 58px; flex: 0 0 58px; align-items: center; gap: 10px; padding: 0 16px 0 20px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); }.task-heading { min-width: 0; }.task-heading h1 { max-width: 300px; overflow: hidden; margin: 0 0 2px; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }.task-path { min-width: 0; flex: 1; overflow: hidden; color: var(--text-muted); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.model-chip { max-width: 210px; overflow: hidden; padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-secondary); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.files-button { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 11px; }.files-button:hover,.files-button.active { border-color: var(--border-subtle); background: var(--surface-hover); color: var(--text-primary); }.workspace-body { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }.conversation-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.cli-banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); font-size: 12px; }.cli-banner span { flex: 1; }.cli-banner button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: inherit; cursor: pointer; text-decoration: underline; }.loading-screen,.settings-loading { display: flex; flex: 1; align-items: center; justify-content: center; gap: 10px; color: var(--text-secondary); }.loading-screen span { color: var(--accent); font-size: 25px; }.global-error { position: absolute; z-index: 30; right: 16px; bottom: 14px; width: min(520px, calc(100% - 32px)); box-shadow: var(--shadow-lg); }
 @media (max-width: 800px) { .app-shell { --sidebar-width: 230px !important; }.task-path { display: none; } }
+@media (max-width: 960px) { .workspace-body :deep(.files-drawer) { position: absolute; top: 0; right: 0; bottom: 0; max-width: 100%; } }
 </style>
