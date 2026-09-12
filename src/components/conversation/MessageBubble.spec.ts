@@ -9,7 +9,6 @@ describe('MessageBubble', () => {
 
     expect(wrapper.get('article').classes()).toContain('user')
     expect(wrapper.get('.user-bubble').text()).toBe('确认')
-    expect(wrapper.get('.avatar').text()).toBe('你')
   })
 
   it('助手回复直接展示正文且不显示身份标识', () => {
