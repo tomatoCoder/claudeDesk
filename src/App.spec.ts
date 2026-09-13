@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
 
 const drawerFocus = vi.fn()
+const conversationInsert = vi.fn()
 const projects = {
   projects: [{ id: 'p1', name: 'claudeDesk', path: '/repo', createdAt: '', lastOpenedAt: '' }],
   tasks: [{ id: 't1', projectId: 'p1', title: 'Task', claudeSessionId: null, modelOverride: null, permissionModeOverride: null, status: 'idle', createdAt: '', updatedAt: '' }],
@@ -31,9 +32,15 @@ vi.mock('./services/ipc', () => ({
 const DrawerStub = defineComponent({
   name: 'FileBrowserDrawer',
   props: ['projectId', 'projectName', 'width'],
-  emits: ['close', 'resize'],
+  emits: ['close', 'resize', 'add-to-conversation', 'comment'],
   setup(_, { expose }) { expose({ focusFilter: drawerFocus }); return {} },
   template: '<aside data-testid="drawer-stub" />',
+})
+
+const ConversationStub = defineComponent({
+  name: 'ConversationView',
+  setup(_, { expose }) { expose({ insertDraft: conversationInsert }); return {} },
+  template: '<section data-testid="conversation-stub" />',
 })
 
 function mountApp() {
@@ -41,7 +48,7 @@ function mountApp() {
     global: {
       stubs: {
         AppSidebar: true,
-        ConversationView: { template: '<section data-testid="conversation-stub" />' },
+        ConversationView: ConversationStub,
         FileBrowserDrawer: DrawerStub,
         StatusPill: true,
         InlineError: true,
@@ -54,6 +61,22 @@ describe('Files integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }) })
+  })
+
+  it('inserts file selections and comments into the active conversation draft', async () => {
+    const wrapper = mountApp()
+    await flushPromises()
+    await wrapper.get('[data-testid="files-button"]').trigger('click')
+
+    wrapper.findComponent(DrawerStub).vm.$emit('add-to-conversation', 'src/main.ts', 3, 4, 'const answer = 42')
+    await flushPromises()
+    expect(conversationInsert).toHaveBeenCalledWith(expect.stringContaining('src/main.ts'))
+    expect(conversationInsert).toHaveBeenCalledWith(expect.stringContaining('const answer = 42'))
+
+    wrapper.findComponent(DrawerStub).vm.$emit('comment', 'src/main.ts', 3, 4, 'const answer = 42', '请改成常量')
+    await flushPromises()
+    expect(conversationInsert).toHaveBeenLastCalledWith(expect.stringContaining('请改成常量'))
+    wrapper.unmount()
   })
 
   it('opens a right drawer without replacing the conversation', async () => {

@@ -40,3 +40,15 @@ pub fn read_project_file(
     let project = state.storage.get_project(&project_id)?;
     files::read_preview(Path::new(&project.path), &path)
 }
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn write_project_file(
+    project_id: String,
+    path: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    super::validate_id(&project_id)?;
+    let project = state.storage.get_project(&project_id)?;
+    files::write_text_file(Path::new(&project.path), &path, &content)
+}

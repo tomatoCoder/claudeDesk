@@ -33,6 +33,7 @@ const error = ref('')
 const filesOpen = ref(false)
 const filesWidth = ref(Math.min(960, Math.max(520, Number(localStorage.getItem('claude-desk:files-width')) || 680)))
 const filesDrawer = ref<InstanceType<typeof FileBrowserDrawer> | null>(null)
+const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 let unlisten: UnlistenFn | undefined
 let settingsPoll: number | undefined
 let systemThemeQuery: MediaQueryList | undefined
@@ -106,6 +107,14 @@ async function toggleFiles() {
 function resizeFiles(width: number) {
   filesWidth.value = width
   localStorage.setItem('claude-desk:files-width', String(width))
+}
+
+async function addFileSelection(path: string, startLine: number, endLine: number, content: string) {
+  await conversationView.value?.insertDraft(`请查看 \`${path}\` 的 R${startLine}-R${endLine}：\n\n\`\`\`\n${content}\n\`\`\``)
+}
+
+async function addFileComment(path: string, startLine: number, endLine: number, content: string, comment: string) {
+  await conversationView.value?.insertDraft(`请处理 \`${path}\` 的 R${startLine}-R${endLine} 评论：${comment}\n\n\`\`\`\n${content}\n\`\`\``)
 }
 
 watch(() => projects.selectedTaskId, async (taskId) => {
@@ -360,7 +369,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         <div class="workspace-body">
           <div class="conversation-pane">
             <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
-            <ConversationView :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
+            <ConversationView ref="conversationView" :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
           </div>
           <FileBrowserDrawer
             v-if="filesOpen && projects.selectedProject"
@@ -370,6 +379,8 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
             :width="filesWidth"
             @close="filesOpen = false"
             @resize="resizeFiles"
+            @add-to-conversation="addFileSelection"
+            @comment="addFileComment"
           />
         </div>
       </template>

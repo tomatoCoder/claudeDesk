@@ -5,6 +5,7 @@ export interface ProjectFilesClient {
   listDirectory: (path: string, force?: boolean) => Promise<ProjectFileEntry[]>
   search: (query: string) => Promise<ProjectFileEntry[] | null>
   read: (path: string, force?: boolean) => Promise<ProjectFilePreview>
+  write: (path: string, content: string) => Promise<void>
   clear: () => void
 }
 
@@ -47,6 +48,11 @@ export function createProjectFilesClient(projectId: string): ProjectFilesClient 
     return pending
   }
 
+  async function write(path: string, content: string) {
+    await ipc.writeProjectFile(projectId, path, content)
+    previews.delete(path)
+  }
+
   async function search(query: string) {
     const version = ++searchVersion
     const normalized = query.trim()
@@ -61,5 +67,5 @@ export function createProjectFilesClient(projectId: string): ProjectFilesClient 
     searchVersion += 1
   }
 
-  return { listDirectory, search, read, clear }
+  return { listDirectory, search, read, write, clear }
 }

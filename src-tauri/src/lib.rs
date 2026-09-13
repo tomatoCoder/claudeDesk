@@ -67,6 +67,7 @@ pub fn run() {
             commands::files::list_project_directory,
             commands::files::search_project_files,
             commands::files::read_project_file,
+            commands::files::write_project_file,
             commands::projects::get_snapshot,
             commands::projects::add_project,
             commands::projects::remove_project,

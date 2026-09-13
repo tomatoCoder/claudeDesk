@@ -92,6 +92,26 @@ pub fn read_preview(root: &Path, relative: &str) -> Result<ProjectFilePreview, A
     }
 }
 
+pub fn write_text_file(root: &Path, relative: &str, content: &str) -> Result<(), AppError> {
+    let root = canonical_root(root)?;
+    let target = resolve_relative(&root, relative, false)?;
+    if !target.is_file() {
+        return Err(AppError::new("not_a_file", "所选路径不是文件", true));
+    }
+    if !matches!(
+        read_preview(&root, relative)?.kind,
+        ProjectFilePreviewKind::Text
+    ) {
+        return Err(AppError::new(
+            "file_not_editable",
+            "仅支持编辑文本文件",
+            true,
+        ));
+    }
+    std::fs::write(target, content)?;
+    Ok(())
+}
+
 pub fn search_files(
     root: &Path,
     query: &str,

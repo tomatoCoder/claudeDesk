@@ -15,6 +15,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   resize: [width: number]
+  'add-to-conversation': [path: string, startLine: number, endLine: number, content: string]
+  comment: [path: string, startLine: number, endLine: number, content: string, comment: string]
 }>()
 const { t } = useI18n()
 const filterInput = ref<HTMLInputElement | null>(null)
@@ -135,6 +137,28 @@ async function copyContent(content: string) {
   await navigator.clipboard?.writeText(content)
 }
 
+async function saveFile(content: string) {
+  if (!selectedPath.value) return
+  previewLoading.value = true
+  previewError.value = ''
+  try {
+    await client.write(selectedPath.value, content)
+    await openFile(selectedPath.value, true)
+  } catch (cause) {
+    previewError.value = message(cause)
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function addToConversation(path: string, startLine: number, endLine: number, content: string) {
+  emit('add-to-conversation', path, startLine, endLine, content)
+}
+
+function addComment(path: string, startLine: number, endLine: number, content: string, comment: string) {
+  emit('comment', path, startLine, endLine, content, comment)
+}
+
 function handleEscape() {
   if (query.value) {
     query.value = ''
@@ -215,6 +239,9 @@ loadRoot()
         @refresh="openFile(selectedPath, true)"
         @close="closePreview"
         @copy="copyContent"
+        @save="saveFile"
+        @add-to-conversation="addToConversation"
+        @comment="addComment"
       />
     </div>
   </aside>

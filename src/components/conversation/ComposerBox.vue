@@ -244,7 +244,17 @@ function handleBrowserDragLeave(event: DragEvent) {
   if (!event.relatedTarget || !current.contains(event.relatedTarget as Node)) dragActive.value = false
 }
 
-defineExpose({ focus: () => textarea.value?.focus() })
+async function insert(textToInsert: string) {
+  const prefix = text.value.trim() ? `${text.value.trimEnd()}\n` : ''
+  text.value = `${prefix}${textToInsert}`
+  await nextTick()
+  textarea.value?.focus()
+  const position = text.value.length
+  textarea.value?.setSelectionRange(position, position)
+  syncCaret()
+}
+
+defineExpose({ focus: () => textarea.value?.focus(), insert })
 </script>
 
 <template>

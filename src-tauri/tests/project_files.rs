@@ -1,7 +1,7 @@
 use claude_desk_lib::{
     commands::files::{list_project_directory, read_project_file, search_project_files},
     domain::{ProjectFileEntry, ProjectFileKind, ProjectFilePreview, ProjectFilePreviewKind},
-    files::{list_directory, read_preview, search_files},
+    files::{list_directory, read_preview, search_files, write_text_file},
 };
 use std::process::Command;
 
@@ -79,6 +79,53 @@ fn classifies_text_image_binary_and_large_files() {
     assert_eq!(
         read_preview(temp.path(), "large.txt").unwrap().kind,
         ProjectFilePreviewKind::TooLarge
+    );
+}
+
+#[test]
+fn saves_text_edits_including_added_and_deleted_content() {
+    let temp = tempfile::tempdir().unwrap();
+    let file = temp.path().join("notes.txt");
+    std::fs::write(&file, "remove this\nkeep this").unwrap();
+
+    write_text_file(temp.path(), "notes.txt", "added line\nkeep this").unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(file).unwrap(),
+        "added line\nkeep this"
+    );
+}
+
+#[test]
+fn rejects_writes_to_non_text_and_outside_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("raw.bin"), [0, 1, 2]).unwrap();
+    std::fs::write(temp.path().join("pixel.png"), [137, 80, 78, 71]).unwrap();
+    std::fs::create_dir(temp.path().join("folder")).unwrap();
+
+    assert_eq!(
+        write_text_file(temp.path(), "raw.bin", "text")
+            .unwrap_err()
+            .code,
+        "file_not_editable"
+    );
+    assert_eq!(
+        write_text_file(temp.path(), "pixel.png", "text")
+            .unwrap_err()
+            .code,
+        "file_not_editable"
+    );
+    assert_eq!(
+        write_text_file(temp.path(), "folder", "text")
+            .unwrap_err()
+            .code,
+        "not_a_file"
+    );
+    assert_eq!(
+        write_text_file(temp.path(), "../outside.txt", "text")
+            .unwrap_err()
+            .code,
+        "path_outside_project"
     );
 }
 

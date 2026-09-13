@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectFileEntry, ProjectFilePreview } from '../../domain/models'
 import FileBrowserDrawer from './FileBrowserDrawer.vue'
+import FilePreview from './FilePreview.vue'
 
 const src: ProjectFileEntry = { name: 'src', path: 'src', kind: 'directory', extension: null }
 const readme: ProjectFileEntry = { name: 'README.md', path: 'README.md', kind: 'file', extension: 'md' }
@@ -13,6 +14,7 @@ const client = {
   listDirectory: vi.fn(),
   search: vi.fn(),
   read: vi.fn(),
+  write: vi.fn(),
   clear: vi.fn(),
 }
 
@@ -34,6 +36,7 @@ describe('FileBrowserDrawer', () => {
     client.listDirectory.mockResolvedValue([src, readme])
     client.search.mockResolvedValue([readme])
     client.read.mockResolvedValue(preview)
+    client.write.mockResolvedValue(undefined)
   })
 
   it('loads the project root and exposes filter focus', async () => {
@@ -69,6 +72,23 @@ describe('FileBrowserDrawer', () => {
     await wrapper.get('.file-preview [title="关闭"]').trigger('click')
     expect(wrapper.find('.file-preview').exists()).toBe(false)
     expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('saves edited text, refreshes the preview, and forwards code actions to the conversation', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-path="README.md"]').trigger('click')
+    await flushPromises()
+
+    const filePreview = wrapper.findComponent(FilePreview)
+    filePreview.vm.$emit('save', '# Updated')
+    await flushPromises()
+    expect(client.write).toHaveBeenCalledWith('README.md', '# Updated')
+    expect(client.read).toHaveBeenLastCalledWith('README.md', true)
+
+    filePreview.vm.$emit('add-to-conversation', 'README.md', 1, 1, '# Hello')
+    expect(wrapper.emitted('add-to-conversation')).toEqual([['README.md', 1, 1, '# Hello']])
     wrapper.unmount()
   })
 

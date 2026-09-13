@@ -28,6 +28,8 @@ export const ipc = {
     invoke<ProjectFileEntry[]>('search_project_files', { projectId, query, limit }),
   readProjectFile: (projectId: string, path: string) =>
     invoke<ProjectFilePreview>('read_project_file', { projectId, path }),
+  writeProjectFile: (projectId: string, path: string, content: string) =>
+    invoke<void>('write_project_file', { projectId, path, content }),
   createTask: (projectId: string, title?: string) => invoke<TaskDto>('create_task', { projectId, title }),
   renameTask: (taskId: string, title: string) => invoke<TaskDto>('rename_task', { taskId, title }),
   deleteTask: (taskId: string) => invoke<void>('delete_task', { taskId }),

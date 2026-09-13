@@ -34,6 +34,67 @@ describe('FilePreview', () => {
     expect(wrapper.emitted('copy')).toEqual([[textPreview.content]])
   })
 
+  it('shows selection actions and submits an inline comment for the selected lines', async () => {
+    const wrapper = mount(FilePreview, { props: { preview: textPreview, loading: false, error: '' }, attachTo: document.body })
+    const firstLine = wrapper.findAll('.source-code')[0]
+    const range = document.createRange()
+    range.selectNodeContents(firstLine.element)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    await wrapper.get('.source-view').trigger('mouseup')
+    expect(wrapper.get('[data-testid="add-to-conversation"]').text()).toContain('添加到会话')
+
+    await wrapper.get('[data-testid="comment-selection"]').trigger('click')
+    expect(wrapper.get('[data-testid="comment-card"]').text()).toContain('第 R1 至 R1 行的本地评论')
+    await wrapper.get('[data-testid="comment-input"]').setValue('这里需要改成常量')
+    await wrapper.get('[data-testid="submit-comment"]').trigger('click')
+    expect(wrapper.emitted('comment')).toEqual([['src/main.ts', 1, 1, 'const answer = 42', '这里需要改成常量']])
+    wrapper.unmount()
+  })
+
+  it('turns selected text into an editable buffer and emits the saved content', async () => {
+    const wrapper = mount(FilePreview, { props: { preview: textPreview, loading: false, error: '' }, attachTo: document.body })
+    const firstLine = wrapper.findAll('.source-code')[0]
+    const range = document.createRange()
+    range.selectNodeContents(firstLine.element)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    await wrapper.get('.source-view').trigger('mouseup')
+
+    await wrapper.get('[data-testid="edit-selection"]').trigger('click')
+    const editor = wrapper.get('[data-testid="file-editor"]')
+    await editor.setValue('const answer = 43\nconsole.log(answer)')
+    await wrapper.get('[data-testid="save-file"]').trigger('click')
+    expect(wrapper.emitted('save')).toEqual([['const answer = 43\nconsole.log(answer)']])
+    wrapper.unmount()
+  })
+
+  it('preserves multiline code selection without line numbers or lost indentation', async () => {
+    const indented: ProjectFilePreview = {
+      ...textPreview,
+      content: '  const answer = 42\n    console.log(answer)',
+    }
+    const wrapper = mount(FilePreview, { props: { preview: indented, loading: false, error: '' }, attachTo: document.body })
+    const [firstLine, secondLine] = wrapper.findAll('.source-code')
+    const range = document.createRange()
+    range.setStart(firstLine.element, 0)
+    range.setEnd(secondLine.element, secondLine.element.childNodes.length)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    await wrapper.get('.source-view').trigger('mouseup')
+    await wrapper.get('[data-testid="add-to-conversation"]').trigger('click')
+
+    expect(wrapper.emitted('add-to-conversation')).toEqual([[
+      'src/main.ts', 1, 2, '  const answer = 42\n    console.log(answer)',
+    ]])
+    wrapper.unmount()
+  })
+
   it('switches Markdown between source and sanitized preview', async () => {
     const markdown: ProjectFilePreview = {
       ...textPreview,

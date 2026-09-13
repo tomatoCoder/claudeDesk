@@ -76,6 +76,11 @@ function closeDialog() {
   composer.value?.focus()
 }
 
+async function insertDraft(value: string) {
+  await nextTick()
+  await composer.value?.insert(value)
+}
+
 const catalog = ref<SlashCommandCatalogDto | null>(null)
 const catalogLoading = ref(false)
 const catalogError = ref('')
@@ -176,6 +181,8 @@ async function answer(requestId: string, updatedInput: unknown) { await resolve(
 async function denyQuestion(requestId: string) { await resolve(requestId, { decision: 'deny', updatedInput: {} }) }
 
 watch(() => props.events.length, async () => { await nextTick(); if (scroll.value) scroll.value.scrollTop = scroll.value.scrollHeight })
+
+defineExpose({ insertDraft })
 </script>
 
 <template>

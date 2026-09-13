@@ -96,6 +96,16 @@ describe('ConversationView', () => {
     expect(submit).toHaveBeenCalledWith('/model sonnet')
   })
 
+  it('把文件选区内容插入当前会话输入框并聚焦', async () => {
+    const wrapper = mount(ConversationView, { props: { task, events: [], cliReady: true }, attachTo: document.body })
+
+    await wrapper.vm.insertDraft('请查看 `src/main.ts` 的 R1-R2：\n```ts\nconst answer = 42\n```')
+
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toContain('src/main.ts')
+    expect(document.activeElement).toBe(wrapper.find('textarea').element)
+    wrapper.unmount()
+  })
+
   it('对话框保存成功后向上抛出 task-updated 并关闭', async () => {
     const wrapper = mount(ConversationView, { props: { task, events: [], cliReady: true } })
     const textarea = wrapper.find('textarea')
