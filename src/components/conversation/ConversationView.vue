@@ -31,6 +31,7 @@ const props = defineProps<{
   events: TaskEvent[]
   cliReady: boolean
   queuedTurns?: QueuedTurnDto[]
+  model?: string
   submit?: (text: string) => Promise<void>
   adjust?: (id: string) => Promise<void>
   sendNow?: (id: string) => Promise<void>
@@ -216,7 +217,7 @@ defineExpose({ insertDraft })
     </div>
     <SlashCommandDialog v-if="dialog" :kind="dialog" :task="task" :models="catalog?.models ?? []" @updated="(value) => emit('task-updated', value)" @close="closeDialog" />
     <InlineError v-if="error" :message="error" @close="error = ''" />
-    <ComposerBox ref="composer" :status="task.status" :queued-turns="queuedTurns ?? []" :disabled="!cliReady" :submit="submitTurn" :adjust="adjust ?? unavailable" :send-now="sendNow ?? unavailable" :remove="remove ?? unavailable" :update="update ?? unavailable" :commands="catalog?.commands ?? []" :commands-loading="catalogLoading" :commands-error="catalogError" @retry-commands="reloadCatalog(true)" @stop="emit('stop')" />
+    <ComposerBox ref="composer" :status="task.status" :queued-turns="queuedTurns ?? []" :disabled="!cliReady" :model="model" :submit="submitTurn" :adjust="adjust ?? unavailable" :send-now="sendNow ?? unavailable" :remove="remove ?? unavailable" :update="update ?? unavailable" :commands="catalog?.commands ?? []" :commands-loading="catalogLoading" :commands-error="catalogError" @retry-commands="reloadCatalog(true)" @stop="emit('stop')" />
   </section>
 </template>
 

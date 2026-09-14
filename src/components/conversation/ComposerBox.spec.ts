@@ -149,6 +149,33 @@ describe('ComposerBox slash menu', () => {
   })
 })
 
+describe('ComposerBox model display', () => {
+  it('未传入 model 时不显示模型标签', () => {
+    const wrapper = mountComposer()
+    expect(wrapper.find('.model-name').exists()).toBe(false)
+  })
+
+  it('传入 model 时在输入框右下角显示模型名称', () => {
+    const wrapper = mount(ComposerBox, {
+      props: {
+        status: 'idle' as const,
+        queuedTurns: [],
+        model: 'kimi-k2.7-code',
+        commands,
+        submit: vi.fn().mockResolvedValue(undefined),
+        adjust: vi.fn().mockResolvedValue(undefined),
+        sendNow: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+        update: vi.fn().mockResolvedValue(undefined),
+      },
+    })
+    const label = wrapper.find('.model-name')
+    expect(label.exists()).toBe(true)
+    expect(label.text()).toBe('kimi-k2.7-code')
+    expect(label.attributes('title')).toBe('kimi-k2.7-code')
+  })
+})
+
 describe('ComposerBox clipboard attachments', () => {
   it('Cmd+V 粘贴截图时生成临时文件并添加为附件', async () => {
     saveClipboardFile.mockResolvedValueOnce('/tmp/claude-desk/clipboard/pasted-image.png')

@@ -56,6 +56,7 @@ let systemThemeQuery: MediaQueryList | undefined
 const taskEvents = computed(() => runtime.events(projects.selectedTaskId))
 const queuedTurns = computed(() => runtime.queuedTurns(projects.selectedTaskId))
 const sidebarStyle = computed(() => ({ '--sidebar-width': `${sidebarCollapsed.value ? 56 : projects.settings.sidebarWidth}px` }))
+const effectiveModel = computed(() => projects.selectedTask?.modelOverride ?? claudeSettings.value?.values.model ?? '')
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
@@ -527,7 +528,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         <div class="workspace-body">
           <div class="conversation-pane">
             <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
-            <ConversationView ref="conversationView" :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
+            <ConversationView ref="conversationView" :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" :model="effectiveModel" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
           </div>
           <FileBrowserDrawer
             v-if="filesOpen && projects.selectedProject"
