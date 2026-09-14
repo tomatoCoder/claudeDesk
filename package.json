@@ -18,6 +18,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "bundle:mac": "node scripts/build-macos.mjs",
+    "bundle:mac:intel": "tauri build --target x86_64-apple-darwin --bundles app,dmg --ci",
     "verify:mac-bundle": "node scripts/verify-macos-bundle.mjs",
     "bundle:windows": "tauri build --bundles nsis"
   },

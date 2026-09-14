@@ -57,6 +57,8 @@ input:focus-visible,
 .secondary-button:hover { background: var(--surface-hover); }
 .danger-button { background: var(--danger-soft); border-color: var(--danger-border); color: var(--text-danger); }
 button:disabled { opacity: .48; cursor: not-allowed; }
+.spinning { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .sr-only {
   position: absolute;

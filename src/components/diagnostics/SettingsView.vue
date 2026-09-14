@@ -25,6 +25,8 @@ const props = withDefaults(defineProps<{
   permissionMode?: AppPermissionMode
   cli: CliDiagnosticDto
   saving?: boolean
+  refreshing?: boolean
+  upgrading?: boolean
   externalConflict?: boolean
   error?: string
 }>(), { theme: 'system', language: 'zh-CN', openWith: 'default', permissionMode: 'default' })
@@ -36,6 +38,7 @@ const emit = defineEmits<{
   openWithChange: [openWith: ProjectOpenWith]
   permissionModeChange: [permissionMode: AppPermissionMode]
   refresh: []
+  upgrade: []
   reload: []
   close: []
   dirty: []
@@ -274,7 +277,8 @@ function changePermissionMode(event: Event) {
           <div class="diagnostic" :class="cli.status">
             <CheckCircle2 v-if="cli.status === 'ready'" :size="19" /><XCircle v-else :size="19" />
             <div><strong>{{ cli.status === 'ready' ? t('cliReady') : t('cliNeedsAttention') }}</strong><p>{{ cli.message }}</p><code v-if="cli.path">{{ cli.path }}<template v-if="cli.version"> · {{ cli.version }}</template></code></div>
-            <button class="icon-button" type="button" :title="t('redetectCli')" @click="emit('refresh')"><RefreshCw :size="15" /></button>
+            <button v-if="cli.status === 'too_old'" class="secondary-button" type="button" :disabled="upgrading" @click="emit('upgrade')">{{ upgrading ? t('upgrading') : t('upgradeNow') }}</button>
+            <button class="icon-button" type="button" :title="t('redetectCli')" :disabled="refreshing" :aria-busy="refreshing" @click="emit('refresh')"><RefreshCw :size="15" :class="{ spinning: refreshing }" /></button>
           </div>
         </div>
       </div>
@@ -300,6 +304,8 @@ function changePermissionMode(event: Event) {
 .json-section textarea { display: block; width: 100%; min-height: 390px; resize: vertical; padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); outline: 0; background: var(--surface-code); color: var(--text-code-muted); font: 12px/1.6 var(--font-mono); tab-size: 2; }.json-section textarea:focus { border-color: var(--accent); }.json-error { margin-top: 9px; color: var(--text-danger); font-size: 12px; }.settings-path { margin-top: 9px; color: var(--text-muted); font-size: 11px; }.settings-path code { font-family: var(--font-mono); }
 .app-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.permission-note { margin-top: 17px; padding: 11px 13px; border-radius: var(--radius-sm); background: var(--surface-subtle); color: var(--text-muted); font-size: 11px; }.permission-warning { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }
 .diagnostic { display: flex; gap: 11px; padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--warning); }.diagnostic.ready { color: var(--success); }.diagnostic div { min-width: 0; flex: 1; }.diagnostic strong { color: var(--text-primary); }.diagnostic p { margin: 4px 0; color: var(--text-secondary); }.diagnostic code { color: var(--text-muted); font: 10px var(--font-mono); }
+.diagnostic > button { flex: 0 0 auto; align-self: center; }
+.spinning { animation: spin 1s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
 .conflict,.settings-error { margin-bottom: 18px; padding: 11px 12px; border-radius: var(--radius-sm); line-height: 1.45; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.conflict button { margin-left: 8px; border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; }.settings-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }
 .settings-footer { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; padding: 14px 28px; border-top: 1px solid var(--border-subtle); background: var(--surface-header); }.settings-footer > span { flex: 1; color: var(--text-muted); font-size: 11px; }
 @media (max-width: 760px) { .settings-content { width: calc(100% - 32px); }.field-grid,.app-grid { grid-template-columns: 1fr; }.settings-footer > span { display: none; } }

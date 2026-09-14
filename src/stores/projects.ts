@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { AppSettingsDto, CliDiagnosticDto, ProjectDto, TaskDto } from '../domain/models'
 import type { TaskStatus } from '../domain/events'
-import { ipc } from '../services/ipc'
+import { errorMessage, ipc } from '../services/ipc'
 import { translate } from '../services/i18n'
 
 export const useProjectsStore = defineStore('projects', () => {
@@ -10,6 +10,8 @@ export const useProjectsStore = defineStore('projects', () => {
   const tasks = ref<TaskDto[]>([])
   const settings = ref<AppSettingsDto>({ claudePath: null, sidebarWidth: 280, theme: 'system', language: 'zh-CN', openWith: 'default', permissionMode: 'default' })
   const cli = ref<CliDiagnosticDto>({ status: 'probe_failed', path: null, version: null, message: translate('checkingClaudeCode') })
+  const refreshingClaude = ref(false)
+  const upgradingClaude = ref(false)
   const selectedProjectId = ref<string | null>(localStorage.getItem('claude-desk:selected-project'))
   const selectedTaskId = ref<string | null>(localStorage.getItem('claude-desk:selected-task'))
 
@@ -87,7 +89,21 @@ export const useProjectsStore = defineStore('projects', () => {
     if (index >= 0) tasks.value.splice(index, 1, task)
   }
 
-  async function refreshDiagnostic() { cli.value = await ipc.diagnoseClaude() }
+  async function refreshDiagnostic() {
+    if (refreshingClaude.value) return
+    refreshingClaude.value = true
+    try { cli.value = await ipc.diagnoseClaude() }
+    catch (cause) { cli.value = { ...cli.value, status: 'probe_failed', message: errorMessage(cause) } }
+    finally { refreshingClaude.value = false }
+  }
+
+  async function upgradeClaude() {
+    if (upgradingClaude.value) return
+    upgradingClaude.value = true
+    try { cli.value = await ipc.upgradeClaude() }
+    catch { cli.value = { ...cli.value, message: translate('manualUpgradeRequired') } }
+    finally { upgradingClaude.value = false }
+  }
 
   async function persistSettings(value: AppSettingsDto) {
     const previousClaudePath = settings.value.claudePath
@@ -95,5 +111,5 @@ export const useProjectsStore = defineStore('projects', () => {
     if (settings.value.claudePath !== previousClaudePath) await refreshDiagnostic()
   }
 
-  return { projects, tasks, settings, cli, selectedProjectId, selectedTaskId, selectedProject, selectedTask, hydrate, selectProject, selectTask, addProject, createTask, renameTask, removeProject, updateTaskStatus, patchTask, refreshDiagnostic, persistSettings }
+  return { projects, tasks, settings, cli, refreshingClaude, upgradingClaude, selectedProjectId, selectedTaskId, selectedProject, selectedTask, hydrate, selectProject, selectTask, addProject, createTask, renameTask, removeProject, updateTaskStatus, patchTask, refreshDiagnostic, upgradeClaude, persistSettings }
 })

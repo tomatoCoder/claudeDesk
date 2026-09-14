@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl};
 
 const BROWSER_LABEL: &str = "browser-panel";
+const DOUBAO_URL: &str = "https://www.doubao.com";
 const MAX_URL_LENGTH: usize = 4096;
 const MAX_SELECTION_LENGTH: usize = 20_000;
 const MAX_COMMENT_LENGTH: usize = 4_000;
@@ -255,6 +256,28 @@ pub async fn open_browser(url: String, app: AppHandle) -> Result<(), AppError> {
         viewport_height: 1.0,
         visible: false,
     }, app).await
+}
+
+#[tauri::command]
+pub fn open_doubao_in_chrome() -> Result<(), AppError> {
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(target_os = "macos")]
+    command.args(["-a", "Google Chrome", DOUBAO_URL]);
+
+    #[cfg(target_os = "windows")]
+    let mut command = std::process::Command::new("cmd");
+    #[cfg(target_os = "windows")]
+    command.args(["/C", "start", "", "chrome", DOUBAO_URL]);
+
+    #[cfg(target_os = "linux")]
+    let mut command = std::process::Command::new("google-chrome");
+    #[cfg(target_os = "linux")]
+    command.arg(DOUBAO_URL);
+
+    command.spawn().map(|_| ()).map_err(|error| {
+        browser_error("chrome_open_failed", &format!("无法启动 Chrome：{error}"))
+    })
 }
 
 #[tauri::command(rename_all = "camelCase")]

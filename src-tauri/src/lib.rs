@@ -63,6 +63,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::application::confirm_app_exit,
             commands::browser::open_browser,
+            commands::browser::open_doubao_in_chrome,
             commands::browser::open_browser_panel,
             commands::browser::set_browser_panel_bounds,
             commands::browser::refresh_browser_panel,
@@ -103,6 +104,7 @@ pub fn run() {
             commands::slash_commands::set_task_model,
             commands::slash_commands::set_task_permission_mode,
             commands::diagnostics::diagnose_claude,
+            commands::diagnostics::upgrade_claude,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Claude Desk");

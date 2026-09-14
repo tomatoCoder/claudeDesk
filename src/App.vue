@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Files, Globe, RefreshCw } from 'lucide-vue-next'
+import { ExternalLink, Files, Globe, RefreshCw } from 'lucide-vue-next'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { AppLanguage, AppPermissionMode, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, ThemePreference } from './domain/models'
 import { useProjectsStore } from './stores/projects'
@@ -161,6 +161,11 @@ async function openBrowserPanel() {
   await browserPanel.value?.focusAddress()
   console.log('[Browser] openBrowserPanel', { browserOpen: browserOpen.value, browserLoaded: browserLoaded.value, browserWidth: browserWidth.value })
   syncBrowserBounds()
+}
+
+async function openDoubao() {
+  try { await ipc.openDoubaoInChrome() }
+  catch (cause) { error.value = errorMessage(cause) }
 }
 
 async function navigateBrowser(value: string) {
@@ -492,6 +497,8 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         :permission-mode="projects.settings.permissionMode"
         :cli="projects.cli"
         :saving="savingSettings"
+        :refreshing="projects.refreshingClaude"
+        :upgrading="projects.upgradingClaude"
         :external-conflict="settingsConflict"
         :error="settingsError"
         @dirty="settingsDirty = true"
@@ -503,6 +510,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         @save-json="saveClaudeSettingsJson"
         @reload="reloadSettings"
         @refresh="projects.refreshDiagnostic"
+        @upgrade="projects.upgradeClaude"
         @close="settingsOpen = false"
       />
       <section v-else-if="settingsOpen" class="settings-loading">
@@ -524,10 +532,11 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
             @click="toggleFiles"
           ><Files :size="15" />{{ t('files') }}</button>
           <button data-testid="browser-button" class="files-button" :class="{ active: browserOpen }" type="button" :aria-pressed="browserOpen" :title="`${t('browser')} (⌘T / Ctrl+T)`" @click="openBrowserPanel"><Globe :size="15" />{{ t('browser') }}</button>
+          <button class="files-button" type="button" :title="t('doubao')" @click="openDoubao"><ExternalLink :size="15" />{{ t('doubao') }}</button>
         </header>
         <div class="workspace-body">
           <div class="conversation-pane">
-            <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button type="button" @click="projects.refreshDiagnostic"><RefreshCw :size="14" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
+            <div v-if="projects.cli.status !== 'ready'" class="cli-banner"><span>{{ projects.cli.message }}</span><button v-if="projects.cli.status === 'too_old'" type="button" :disabled="projects.upgradingClaude" @click="projects.upgradeClaude">{{ projects.upgradingClaude ? t('upgrading') : t('upgradeNow') }}</button><button type="button" :disabled="projects.refreshingClaude" @click="projects.refreshDiagnostic"><RefreshCw :size="14" :class="{ spinning: projects.refreshingClaude }" />{{ t('redetect') }}</button><button type="button" @click="openSettings">{{ t('openSettings') }}</button></div>
             <ConversationView ref="conversationView" :task="projects.selectedTask" :events="taskEvents" :queued-turns="queuedTurns" :cli-ready="projects.cli.status === 'ready'" :submit="submit" :adjust="adjustQueued" :send-now="sendQueuedNow" :remove="deleteQueued" :update="updateQueued" :model="effectiveModel" @stop="stop" @open-settings="openSettings" @task-updated="projects.patchTask" />
           </div>
           <FileBrowserDrawer

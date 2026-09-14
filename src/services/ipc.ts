@@ -22,6 +22,7 @@ export async function chooseProjectDirectory(): Promise<string | null> {
 }
 
 export const ipc = {
+  openDoubaoInChrome: () => invoke<void>('open_doubao_in_chrome'),
   openBrowser: (url: string) => invoke<void>('open_browser', { url }),
   openBrowserPanel: (url: string, bounds: BrowserPanelBounds) =>
     invoke<void>('open_browser_panel', { url, bounds }),
@@ -66,6 +67,7 @@ export const ipc = {
   resolvePermission: (taskId: string, requestId: string, decision: string, updatedInput: unknown, permissionUpdate?: unknown) =>
     invoke<void>('resolve_permission', { taskId, requestId, decision, updatedInput, permissionUpdate }),
   diagnoseClaude: () => invoke<CliDiagnosticDto>('diagnose_claude'),
+  upgradeClaude: () => invoke<CliDiagnosticDto>('upgrade_claude'),
   saveSettings: (settings: AppSettingsDto) => invoke<AppSettingsDto>('save_settings', { settings }),
   loadClaudeSettings: () => invoke<ClaudeSettingsDto>('get_claude_settings'),
   saveClaudeSettings: (version: string, values: ManagedClaudeSettings) =>

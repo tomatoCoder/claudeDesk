@@ -11,6 +11,10 @@ export function sidecarTarget(triple) {
       bunTarget: "bun-darwin-arm64",
       filename: "claude-agent-bridge-aarch64-apple-darwin",
     },
+    "x86_64-apple-darwin": {
+      bunTarget: "bun-darwin-x64",
+      filename: "claude-agent-bridge-x86_64-apple-darwin",
+    },
     "x86_64-pc-windows-msvc": {
       bunTarget: "bun-windows-x64",
       filename: "claude-agent-bridge-x86_64-pc-windows-msvc.exe",
