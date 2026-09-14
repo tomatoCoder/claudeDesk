@@ -26,6 +26,7 @@ type RenderItem =
   | { type: 'result'; key: string; turns: number | null }
   | { type: 'stopped'; key: string; seconds: number }
   | { type: 'thinking'; key: string }
+  | { type: 'cursor'; key: string }
 
 const props = defineProps<{
   task: TaskDto
@@ -130,6 +131,7 @@ const items = computed<RenderItem[]>(() => {
   const result: RenderItem[] = []
   const messages = new Map<string, Extract<RenderItem, { type: 'message' }>>()
   const currentAssistantByRun = new Map<string, Extract<RenderItem, { type: 'message' }>>()
+  const lastAssistantByRun = new Map<string, Extract<RenderItem, { type: 'message' }>>()
   const tools = new Map<string, Extract<RenderItem, { type: 'tool' }>>()
   const resolved = new Set(props.events.filter((event) => event.kind === 'permission_resolved').map((event) => event.data.requestId))
   // 每轮起止时间：runId 首个事件作为轮次起点，result 事件作为终点（用于总耗时）。
@@ -154,6 +156,7 @@ const items = computed<RenderItem[]>(() => {
           result.push(item)
         }
         messages.set(event.data.messageId, item)
+        lastAssistantByRun.set(event.runId, item)
         item.text += event.data.text
         break
       }
@@ -162,6 +165,8 @@ const items = computed<RenderItem[]>(() => {
         const item = messages.get(event.data.messageId) ?? currentAssistantByRun.get(event.runId)
         if (item) { item.text = event.data.markdown; item.streaming = false; messages.set(event.data.messageId, item) }
         else { const created: Extract<RenderItem, { type: 'message' }> = { type: 'message', key: `message:${event.runId}:${event.data.messageId}`, role: 'assistant', text: event.data.markdown, turnStartedAt: runStart.get(event.runId), turnDurationMs: runDuration.get(event.runId) ?? null }; messages.set(event.data.messageId, created); result.push(created) }
+        const latest = messages.get(event.data.messageId) ?? item
+        if (latest) lastAssistantByRun.set(event.runId, latest)
         currentAssistantByRun.delete(event.runId)
         break
       }
@@ -179,9 +184,13 @@ const items = computed<RenderItem[]>(() => {
   // 最新一轮已有用户消息、任务运行中、本轮尚无任何助手输出 → 显示「正在思考…」占位。
   const awaitingReply = active.value && props.task.status !== 'awaiting_permission' && lastUserRun !== null && !assistantRuns.has(lastUserRun)
   if (awaitingReply && lastUserRun !== null) result.push({ type: 'thinking', key: `thinking:${lastUserRun}` })
-  const lastAssistant = [...result].reverse().find((item) => item.type === 'message' && item.role === 'assistant')
-  // 等待首段回复期间由「正在思考…」占位负责提示，旧消息不再显示流式光标。
-  if (lastAssistant?.type === 'message') lastAssistant.streaming = active.value && !awaitingReply && props.task.status !== 'awaiting_permission'
+  // 流式光标只属于最新一轮；工具卡位于文本之后时，光标跟随整个时间线而不是回落到旧消息。
+  for (const item of messages.values()) item.streaming = false
+  if (active.value && !awaitingReply && props.task.status !== 'awaiting_permission' && lastUserRun !== null) {
+    const currentAssistant = lastAssistantByRun.get(lastUserRun)
+    if (currentAssistant && result.at(-1) === currentAssistant) currentAssistant.streaming = true
+    else result.push({ type: 'cursor', key: `cursor:${lastUserRun}` })
+  }
   return result
 })
 
@@ -215,6 +224,7 @@ defineExpose({ insertDraft })
           <div v-else-if="item.type === 'result'" class="result">{{ t('turnComplete') }}<span v-if="item.turns"> · {{ t('turns', { count: item.turns }) }}</span></div>
           <div v-else-if="item.type === 'stopped'" class="result stopped-notice">{{ t('turnStopped', { s: item.seconds }) }}</div>
           <div v-else-if="item.type === 'thinking'" class="thinking">{{ t('thinking') }}</div>
+          <div v-else-if="item.type === 'cursor'" class="stream-cursor" :aria-label="t('generating')" />
         </template>
       </div>
     </div>
@@ -227,7 +237,8 @@ defineExpose({ insertDraft })
 <style scoped>
 .conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.turn-time { margin: 20px 0 2px; color: var(--text-muted); font-size: 10px; text-align: center; user-select: none; }.timeline .turn-time:first-child { margin-top: 0; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.event-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }.stopped-notice { color: var(--text-warning); }
 .thinking { margin: 10px 0; color: var(--text-muted); font-size: 13px; animation: thinking-pulse 1.2s ease-in-out infinite; }@keyframes thinking-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-@media (prefers-reduced-motion: reduce) { .thinking { animation: none; } }
+.stream-cursor { width: 6px; height: 15px; margin: 10px 0; background: var(--accent); animation: cursor-blink 1s steps(1) infinite; }@keyframes cursor-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .thinking,.stream-cursor { animation: none; } }
 .cli-output { display: flex; gap: 10px; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-header); }.cli-badge { flex: none; height: fit-content; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 700; }.cli-output pre { min-width: 0; flex: 1; margin: 0; overflow: auto; color: var(--text-secondary); font: 11px/1.6 var(--font-mono); white-space: pre-wrap; }
 @media (max-width: 720px) { .timeline { width: calc(100% - 28px); padding-top: 18px; } }
 </style>
