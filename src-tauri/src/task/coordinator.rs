@@ -71,6 +71,21 @@ enum RunControl {
     },
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum AdjustmentAction {
+    SendToRunning,
+    DeferToQueue,
+    Reject,
+}
+
+fn adjustment_action(status: &TaskStatus) -> AdjustmentAction {
+    match status {
+        TaskStatus::Starting | TaskStatus::Running => AdjustmentAction::SendToRunning,
+        TaskStatus::Completed => AdjustmentAction::DeferToQueue,
+        _ => AdjustmentAction::Reject,
+    }
+}
+
 impl TaskCoordinator {
     pub fn new(
         storage: Storage,
@@ -698,12 +713,19 @@ impl TaskCoordinator {
                         AppError::new("task_not_running", "该会话当前未运行", true)
                     })?;
                 let status = self.storage.get_task(task_id)?.status;
-                if !matches!(status, TaskStatus::Starting | TaskStatus::Running) {
-                    return Err(AppError::new(
-                        "adjustment_unavailable",
-                        "当前状态不能调整方向",
-                        true,
-                    ));
+                match adjustment_action(&status) {
+                    AdjustmentAction::SendToRunning => {}
+                    // The terminal status is persisted before the running entry is removed and
+                    // the next queued turn is claimed. Leave this turn in place so that handoff
+                    // can start it instead of surfacing a transient "cannot adjust" error.
+                    AdjustmentAction::DeferToQueue => return Ok(()),
+                    AdjustmentAction::Reject => {
+                        return Err(AppError::new(
+                            "adjustment_unavailable",
+                            "当前状态不能调整方向",
+                            true,
+                        ))
+                    }
                 }
                 let (turn, index) = state.queued_turns.take(task_id, id).ok_or_else(|| {
                     AppError::new("queued_turn_not_found", "等待消息不存在", true)

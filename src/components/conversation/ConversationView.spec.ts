@@ -41,6 +41,45 @@ function event<K extends TaskEvent['kind']>(sequence: number, kind: K, data: Ext
 }
 
 describe('ConversationView', () => {
+  it('运行中且本轮尚无助手输出时显示「正在思考…」占位', () => {
+    const events = [event(1, 'user_message', { text: 'Hello' })]
+    const wrapper = mount(ConversationView, { props: { task: { ...task, status: 'running' }, events, cliReady: true } })
+    const thinking = wrapper.find('.thinking')
+    expect(thinking.exists()).toBe(true)
+    expect(thinking.text()).toBe('正在思考…')
+  })
+
+  it('第一段助手回复到达后「正在思考…」占位消失', () => {
+    const events = [
+      event(1, 'user_message', { text: 'Hello' }),
+      event(2, 'assistant_delta', { messageId: 'delta-1', text: 'He' }),
+    ]
+    const wrapper = mount(ConversationView, { props: { task: { ...task, status: 'running' }, events, cliReady: true } })
+    expect(wrapper.find('.thinking').exists()).toBe(false)
+    expect(wrapper.find('.message.assistant').exists()).toBe(true)
+  })
+
+  it('本轮出现工具调用后「正在思考…」占位消失', () => {
+    const events = [
+      event(1, 'user_message', { text: 'Hello' }),
+      event(2, 'tool_started', { toolUseId: 'tool-1', toolName: 'Read', input: { path: 'a.ts' } }),
+    ]
+    const wrapper = mount(ConversationView, { props: { task: { ...task, status: 'running' }, events, cliReady: true } })
+    expect(wrapper.find('.thinking').exists()).toBe(false)
+  })
+
+  it('任务结束后不显示「正在思考…」占位', () => {
+    const events = [event(1, 'user_message', { text: 'Hello' })]
+    const wrapper = mount(ConversationView, { props: { task, events, cliReady: true } })
+    expect(wrapper.find('.thinking').exists()).toBe(false)
+  })
+
+  it('等待权限确认时不显示「正在思考…」占位', () => {
+    const events = [event(1, 'user_message', { text: 'Hello' })]
+    const wrapper = mount(ConversationView, { props: { task: { ...task, status: 'awaiting_permission' }, events, cliReady: true } })
+    expect(wrapper.find('.thinking').exists()).toBe(false)
+  })
+
   it('把同一轮的流式片段与最终消息合并为一条助手回复', () => {
     const events = [
       event(1, 'user_message', { text: 'Hello' }),

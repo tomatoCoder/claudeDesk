@@ -173,15 +173,19 @@ const COMMENT_OVERLAY_SCRIPT: &str = r#"
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn open_browser_panel(url: String, bounds: BrowserPanelBounds, app: AppHandle) -> Result<(), AppError> {
+    println!("[Browser Rust] open_browser_panel url={} bounds={:?} visible={}", url, bounds, bounds.visible);
     let url = parse_browser_url(&url)?;
     let main = main_window(&app)?;
     let (position, size) = panel_geometry(&main, &bounds);
+    println!("[Browser Rust] computed geometry position={:?} size={:?}", position, size);
     if let Some(webview) = app.get_webview(BROWSER_LABEL) {
+        println!("[Browser Rust] reusing existing webview");
         webview.navigate(url).map_err(|error| browser_error("browser_navigation_failed", &error.to_string()))?;
         webview.set_bounds(tauri::Rect { position: position.into(), size: size.into() }).map_err(|error| browser_error("browser_bounds_failed", &error.to_string()))?;
-        if bounds.visible { webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
+        if bounds.visible { println!("[Browser Rust] show existing webview"); webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { println!("[Browser Rust] hide existing webview"); webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
         return Ok(());
     }
+    println!("[Browser Rust] creating new webview");
     let webview = main.add_child(
         WebviewBuilder::new(BROWSER_LABEL, WebviewUrl::External(url))
             .initialization_script(COMMENT_OVERLAY_SCRIPT)
@@ -195,17 +199,20 @@ pub async fn open_browser_panel(url: String, bounds: BrowserPanelBounds, app: Ap
         size,
     )
     .map_err(|error| browser_error("browser_create_failed", &error.to_string()))?;
-    if bounds.visible { webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
+    println!("[Browser Rust] webview created");
+    if bounds.visible { println!("[Browser Rust] show new webview"); webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { println!("[Browser Rust] hide new webview"); webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
     Ok(())
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn set_browser_panel_bounds(bounds: BrowserPanelBounds, app: AppHandle) -> Result<(), AppError> {
+    println!("[Browser Rust] set_browser_panel_bounds bounds={:?} visible={}", bounds, bounds.visible);
     let main = main_window(&app)?;
     let (position, size) = panel_geometry(&main, &bounds);
-    let Some(webview) = app.get_webview(BROWSER_LABEL) else { return Ok(()) };
+    println!("[Browser Rust] computed geometry position={:?} size={:?}", position, size);
+    let Some(webview) = app.get_webview(BROWSER_LABEL) else { println!("[Browser Rust] no webview found"); return Ok(()) };
     webview.set_bounds(tauri::Rect { position: position.into(), size: size.into() }).map_err(|error| browser_error("browser_bounds_failed", &error.to_string()))?;
-    if bounds.visible { webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
+    if bounds.visible { println!("[Browser Rust] set bounds show webview"); webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { println!("[Browser Rust] set bounds hide webview"); webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
     Ok(())
 }
 
@@ -228,6 +235,7 @@ pub fn set_browser_annotation_mode(enabled: bool, app: AppHandle) -> Result<(), 
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn close_browser_panel(app: AppHandle) -> Result<(), AppError> {
+    println!("[Browser Rust] close_browser_panel");
     if let Some(webview) = app.get_webview(BROWSER_LABEL) {
         webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?;
         let _ = webview.eval("window.__CLAUDE_DESK_SET_ANNOTATION_MODE__?.(false)");

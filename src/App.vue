@@ -93,6 +93,7 @@ onMounted(async () => {
       await ipc.confirmAppExit()
     })
     unlistenBrowserPage = await listen<{ url: string; loading: boolean }>('browser-page-state', ({ payload }) => {
+      console.log('[Browser] browser-page-state', payload)
       browserUrl.value = payload.url
       browserAnnotationEnabled.value = false
       browserError.value = ''
@@ -148,6 +149,7 @@ async function openBrowserPanel() {
   browserOpen.value = true
   await nextTick()
   await browserPanel.value?.focusAddress()
+  console.log('[Browser] openBrowserPanel', { browserOpen: browserOpen.value, browserLoaded: browserLoaded.value, browserWidth: browserWidth.value })
   syncBrowserBounds()
 }
 
@@ -156,12 +158,14 @@ async function navigateBrowser(value: string) {
   try {
     browserUrl.value = normalizeBrowserUrl(value)
     const bounds = browserPanel.value?.webviewBounds()
+    console.log('[Browser] navigateBrowser bounds', bounds)
     if (!bounds) throw new Error(t('browserPanelUnavailable'))
     setBrowserLoading(true)
     await ipc.openBrowserPanel(browserUrl.value, { ...bounds, visible: browserOpen.value })
     browserLoaded.value = true
+    console.log('[Browser] navigateBrowser success, loaded=true')
     syncBrowserBounds()
-  } catch (cause) { setBrowserLoading(false); browserError.value = errorMessage(cause); syncBrowserBounds() }
+  } catch (cause) { console.error('[Browser] navigateBrowser error', cause); setBrowserLoading(false); browserError.value = errorMessage(cause); syncBrowserBounds() }
 }
 
 function resizeBrowser(width: number) {
@@ -181,13 +185,16 @@ async function syncBrowserBounds() {
       browserBoundsPending = false
       await nextTick()
       const bounds = browserPanel.value?.webviewBounds()
+      const visible = browserLoaded.value && !browserError.value
+      console.log('[Browser] syncBrowserBounds', { browserOpen: browserOpen.value, browserLoaded: browserLoaded.value, browserError: browserError.value, visible, bounds })
       if (browserOpen.value && bounds) {
-        await ipc.setBrowserPanelBounds({ ...bounds, visible: browserLoaded.value && !browserError.value })
+        await ipc.setBrowserPanelBounds({ ...bounds, visible })
       } else {
+        console.log('[Browser] syncBrowserBounds calling closeBrowserPanel')
         await ipc.closeBrowserPanel()
       }
     }
-  } catch (cause) { browserError.value = errorMessage(cause) }
+  } catch (cause) { console.error('[Browser] syncBrowserBounds error', cause); browserError.value = errorMessage(cause) }
   finally { syncingBrowser = false }
 }
 
@@ -202,9 +209,11 @@ function closeBrowserPanel() {
 function setBrowserLoading(loading: boolean) {
   window.clearTimeout(browserLoadTimer)
   browserLoading.value = loading
+  console.log('[Browser] setBrowserLoading', loading)
   if (loading) browserLoadTimer = window.setTimeout(() => {
     browserLoading.value = false
     browserError.value = '网页加载超时，请检查网址或网络后重试。'
+    console.log('[Browser] load timeout')
     void syncBrowserBounds()
   }, 30000)
 }
