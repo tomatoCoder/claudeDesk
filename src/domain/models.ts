@@ -26,12 +26,14 @@ export interface AppSettingsDto {
   theme: ThemePreference
   language: AppLanguage
   openWith: ProjectOpenWith
+  terminalApp: TerminalApp
   permissionMode: AppPermissionMode
 }
 
 export type ThemePreference = 'system' | 'dark' | 'light'
 export type AppLanguage = 'zh-CN' | 'en-US'
 export type ProjectOpenWith = 'default' | 'qoder' | 'vscode' | 'intellij_idea'
+export type TerminalApp = 'default' | 'terminal' | 'iterm' | 'windows_terminal' | 'command_prompt' | 'powershell' | 'gnome_terminal' | 'konsole' | 'alacritty' | 'kitty' | 'xterm'
 export type AppPermissionMode = 'default' | 'auto' | 'bypass'
 export type TaskPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'dontAsk'
 

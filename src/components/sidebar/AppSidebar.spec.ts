@@ -26,4 +26,22 @@ describe('AppSidebar', () => {
     expect(logo.element.tagName).toBe('IMG')
     expect(logo.attributes('src')).toMatch(/app-logo\.png$/)
   })
+
+  it('收起时隐藏品牌 logo 并仅显示展开按钮', () => {
+    const wrapper = mount(AppSidebar, {
+      props: {
+        projects: [],
+        tasks: [],
+        selectedProjectId: null,
+        selectedTaskId: null,
+        cli,
+        collapsed: true,
+      },
+    })
+
+    expect(wrapper.find('aside').classes()).toContain('collapsed')
+    const toggle = wrapper.find('[data-testid="sidebar-toggle"]')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.attributes('aria-label')).toBe('展开侧边栏')
+  })
 })

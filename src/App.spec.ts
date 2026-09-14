@@ -11,7 +11,7 @@ const conversationInsert = vi.fn()
 const projects = reactive({
   projects: [{ id: 'p1', name: 'claudeDesk', path: '/repo', createdAt: '', lastOpenedAt: '' }],
   tasks: [{ id: 't1', projectId: 'p1', title: 'Task', claudeSessionId: null, modelOverride: null, permissionModeOverride: null, status: 'idle', createdAt: '', updatedAt: '' }],
-  settings: { claudePath: null, sidebarWidth: 280, theme: 'light', language: 'zh-CN', openWith: 'default', permissionMode: 'default' },
+  settings: { claudePath: null, sidebarWidth: 280, theme: 'light', language: 'zh-CN', openWith: 'default', terminalApp: 'default', permissionMode: 'default' },
   cli: { status: 'ready', path: '/bin/claude', version: '1', message: '' },
   selectedProjectId: 'p1', selectedTaskId: 't1',
   selectedProject: { id: 'p1', name: 'claudeDesk', path: '/repo', createdAt: '', lastOpenedAt: '' },
@@ -28,7 +28,7 @@ vi.mock('./services/queuedTurns', () => ({ listenToQueuedTurns: vi.fn(async () =
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => vi.fn()) }))
 vi.mock('./services/ipc', () => ({
   chooseProjectDirectory: vi.fn(), errorMessage: (cause: unknown) => String(cause),
-  ipc: { closeBrowserPanel: vi.fn(async () => {}), setBrowserPanelBounds: vi.fn(async () => {}), openBrowserPanel: vi.fn(async () => {}), loadClaudeSettings: vi.fn(async () => ({ values: { model: '' }, raw: '{}', version: '1', path: '' })) },
+  ipc: { closeBrowserPanel: vi.fn(async () => {}), setBrowserPanelBounds: vi.fn(async () => {}), openBrowserPanel: vi.fn(async () => {}), openTerminal: vi.fn(async () => {}), loadClaudeSettings: vi.fn(async () => ({ values: { model: '' }, raw: '{}', version: '1', path: '' })) },
 }))
 
 const DrawerStub = defineComponent({
@@ -54,6 +54,12 @@ const ConversationStub = defineComponent({
   template: '<section data-testid="conversation-stub" />',
 })
 
+const ErrorStub = defineComponent({
+  name: 'InlineError',
+  props: ['message'],
+  template: '<div>{{ message }}</div>',
+})
+
 function mountApp() {
   return mount(App, {
     global: {
@@ -63,7 +69,7 @@ function mountApp() {
         FileBrowserDrawer: DrawerStub,
         BrowserPanel: BrowserStub,
         StatusPill: true,
-        InlineError: true,
+        InlineError: ErrorStub,
       },
     },
   })
@@ -119,6 +125,37 @@ describe('Files integration', () => {
     await flushPromises()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true }))
     expect(wrapper.find('[data-testid="drawer-stub"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('Terminal integration', () => {
+  it('opens a terminal in the selected project directory', async () => {
+    const wrapper = mountApp()
+    await flushPromises()
+    await wrapper.get('[data-testid="terminal-button"]').trigger('click')
+    expect(ipc.openTerminal).toHaveBeenCalledWith('p1')
+    wrapper.unmount()
+  })
+
+  it('surfaces terminal failures in the global error banner', async () => {
+    vi.mocked(ipc.openTerminal).mockRejectedValueOnce(new Error('boom'))
+    const wrapper = mountApp()
+    await flushPromises()
+    await wrapper.get('[data-testid="terminal-button"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'InlineError' }).props('message')).toContain('boom')
+    wrapper.unmount()
+  })
+
+  it('opens the terminal with Command+Shift+T', async () => {
+    const wrapper = mountApp()
+    await flushPromises()
+    const shortcut = new KeyboardEvent('keydown', { key: 't', metaKey: true, shiftKey: true, cancelable: true })
+    window.dispatchEvent(shortcut)
+    await flushPromises()
+    expect(shortcut.defaultPrevented).toBe(true)
+    expect(ipc.openTerminal).toHaveBeenCalledWith('p1')
     wrapper.unmount()
   })
 })

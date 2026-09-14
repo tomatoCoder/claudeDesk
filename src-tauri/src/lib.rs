@@ -81,6 +81,7 @@ pub fn run() {
             commands::projects::add_project,
             commands::projects::remove_project,
             commands::projects::open_project,
+            commands::projects::open_terminal,
             commands::projects::save_settings,
             commands::sessions::refresh_claude_sessions,
             commands::sessions::get_claude_session_messages,

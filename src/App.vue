@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ExternalLink, Files, Globe, RefreshCw } from 'lucide-vue-next'
+import { ExternalLink, Files, Globe, RefreshCw, Terminal } from 'lucide-vue-next'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { AppLanguage, AppPermissionMode, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, ThemePreference } from './domain/models'
+import type { AppLanguage, AppPermissionMode, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, TerminalApp, ThemePreference } from './domain/models'
 import { useProjectsStore } from './stores/projects'
 import { useRuntimeStore } from './stores/runtime'
 import { chooseProjectDirectory, errorMessage, ipc } from './services/ipc'
@@ -12,6 +12,7 @@ import { applyTheme } from './services/theme'
 import { setAppLanguage, useI18n } from './services/i18n'
 import { isFilesShortcut } from './services/fileShortcut'
 import { isBrowserShortcut } from './services/browserShortcut'
+import { isTerminalShortcut } from './services/terminalShortcut'
 import { formatBrowserCommentDraft, normalizeBrowserUrl, type BrowserCommentPayload } from './services/browserUrl'
 import AppSidebar from './components/sidebar/AppSidebar.vue'
 import ConversationView from './components/conversation/ConversationView.vue'
@@ -82,6 +83,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleFilesShortcut)
   window.addEventListener('keydown', handleFileFindShortcut)
   window.addEventListener('keydown', handleBrowserShortcut)
+  window.addEventListener('keydown', handleTerminalShortcut)
   window.addEventListener('resize', syncBrowserBounds)
   getSystemThemeQuery().addEventListener('change', handleSystemThemeChange)
   try {
@@ -120,6 +122,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleFilesShortcut)
   window.removeEventListener('keydown', handleFileFindShortcut)
   window.removeEventListener('keydown', handleBrowserShortcut)
+  window.removeEventListener('keydown', handleTerminalShortcut)
   window.removeEventListener('resize', syncBrowserBounds)
   unlisten?.()
   unlistenBrowserComment?.()
@@ -153,6 +156,13 @@ function handleBrowserShortcut(event: KeyboardEvent) {
   openBrowserPanel()
 }
 
+function handleTerminalShortcut(event: KeyboardEvent) {
+  const blocked = settingsOpen.value || !!document.querySelector('[role="dialog"]') || !projects.selectedProject
+  if (!isTerminalShortcut(event, blocked)) return
+  event.preventDefault()
+  openTerminal()
+}
+
 async function openBrowserPanel() {
   filesOpen.value = false
   browserError.value = ''
@@ -165,6 +175,12 @@ async function openBrowserPanel() {
 
 async function openDoubao() {
   try { await ipc.openDoubaoInChrome() }
+  catch (cause) { error.value = errorMessage(cause) }
+}
+
+async function openTerminal() {
+  if (!projects.selectedProject) return
+  try { await ipc.openTerminal(projects.selectedProject.id) }
   catch (cause) { error.value = errorMessage(cause) }
 }
 
@@ -453,6 +469,19 @@ async function changeOpenWith(openWith: ProjectOpenWith) {
   }
 }
 
+async function changeTerminalApp(terminalApp: TerminalApp) {
+  if (terminalApp === projects.settings.terminalApp) return
+  const previousTerminalApp = projects.settings.terminalApp
+  projects.settings.terminalApp = terminalApp
+  settingsError.value = ''
+  try {
+    await projects.persistSettings({ ...projects.settings, terminalApp })
+  } catch (cause) {
+    projects.settings.terminalApp = previousTerminalApp
+    settingsError.value = errorMessage(cause)
+  }
+}
+
 async function changePermissionMode(permissionMode: AppPermissionMode) {
   if (permissionMode === projects.settings.permissionMode) return
   const previousPermissionMode = projects.settings.permissionMode
@@ -494,6 +523,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         :theme="projects.settings.theme"
         :language="projects.settings.language"
         :open-with="projects.settings.openWith"
+        :terminal-app="projects.settings.terminalApp"
         :permission-mode="projects.settings.permissionMode"
         :cli="projects.cli"
         :saving="savingSettings"
@@ -505,6 +535,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         @theme-change="changeTheme"
         @language-change="changeLanguage"
         @open-with-change="changeOpenWith"
+        @terminal-app-change="changeTerminalApp"
         @permission-mode-change="changePermissionMode"
         @save="saveClaudeSettings"
         @save-json="saveClaudeSettingsJson"
@@ -521,7 +552,14 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
         <header class="task-header">
           <div class="task-heading"><h1>{{ projects.selectedTask.title }}</h1><StatusPill :status="projects.selectedTask.status" /></div>
           <div class="task-path" :title="projects.selectedProject?.path">{{ projects.selectedProject?.path }}</div>
-          <div v-if="claudeSettings?.values.model" class="model-chip" :title="t('newSessionDefaultModel')">{{ claudeSettings.values.model }}</div>
+          <button
+            data-testid="terminal-button"
+            class="files-button"
+            type="button"
+            :disabled="!projects.selectedProject"
+            :title="`${t('terminalApp')} (⌘⇧T / Ctrl+Shift+T)`"
+            @click="openTerminal"
+          ><Terminal :size="15" />{{ t('terminalApp') }}</button>
           <button
             data-testid="files-button"
             class="files-button"

@@ -227,6 +227,7 @@ impl TaskCoordinator {
         let coordinator = self.clone();
         let error_sequence = sequence.clone();
         let returned_run_id = run_id.clone();
+        let run_started_at = std::time::Instant::now();
         spawn_background(async move {
             let status = match coordinator
                 .run(
@@ -270,6 +271,20 @@ impl TaskCoordinator {
             let _ = coordinator
                 .storage
                 .transition_task(&task_id, status.clone());
+            if status == TaskStatus::Interrupted {
+                let _ = publish(
+                    &coordinator.storage,
+                    &app,
+                    TaskEvent::new(
+                        &task_id,
+                        &run_id,
+                        next(&error_sequence),
+                        TaskEventPayload::Stopped {
+                            seconds: run_started_at.elapsed().as_secs(),
+                        },
+                    ),
+                );
+            }
             let _ = publish_status(
                 &coordinator.storage,
                 &app,
@@ -759,6 +774,29 @@ impl TaskCoordinator {
                 self.publish_queued_turns(app, task_id)
             }
             Err(error) => {
+                if matches!(error.code.as_str(), "run_finished" | "adjustment_rejected") {
+                    // The worker can finish between the status check and the control send. In
+                    // that race, this adjustment is the user's replacement prompt, so start it
+                    // as a new turn instead of surfacing a stale "run finished" error.
+                    {
+                        let mut state = self.state.lock();
+                        if state
+                            .running
+                            .get(task_id)
+                            .is_some_and(|current| current.run_id == running.run_id)
+                        {
+                            state.running.remove(task_id);
+                        }
+                    }
+                    let task = self.storage.get_task(task_id)?;
+                    match self.start_turn(app.clone(), task, turn.text.clone()) {
+                        Ok(TurnSubmission::Started { .. }) => {
+                            self.publish_queued_turns(app, task_id)?;
+                            return Ok(());
+                        }
+                        Ok(TurnSubmission::Queued { .. }) | Err(_) => {}
+                    }
+                }
                 self.state.lock().queued_turns.restore(task_id, index, turn);
                 self.publish_queued_turns(app, task_id)?;
                 Err(error)

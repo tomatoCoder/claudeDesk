@@ -13,6 +13,7 @@ commands.allow = [
   "add_project",
   "remove_project",
   "open_project",
+  "open_terminal",
   "save_settings",
   "refresh_claude_sessions",
   "get_claude_session_messages",

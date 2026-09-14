@@ -128,6 +128,9 @@ pub enum TaskEventPayload {
         cost_usd: Option<f64>,
         turns: Option<u64>,
     },
+    Stopped {
+        seconds: u64,
+    },
     LocalCommandOutput {
         content: String,
     },
@@ -155,6 +158,7 @@ impl TaskEventPayload {
             Self::WorkspaceConflict { .. } => "workspace_conflict",
             Self::StatusChanged { .. } => "status_changed",
             Self::Result { .. } => "result",
+            Self::Stopped { .. } => "stopped",
             Self::LocalCommandOutput { .. } => "local_command_output",
             Self::Error { .. } => "error",
             Self::Unknown { .. } => "unknown",
@@ -228,6 +232,8 @@ pub struct AppSettingsDto {
     #[serde(default)]
     pub open_with: ProjectOpenWith,
     #[serde(default)]
+    pub terminal_app: TerminalApp,
+    #[serde(default)]
     pub permission_mode: AppPermissionMode,
 }
 
@@ -257,6 +263,23 @@ pub enum ProjectOpenWith {
     Qoder,
     Vscode,
     IntellijIdea,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalApp {
+    #[default]
+    Default,
+    Terminal,
+    Iterm,
+    WindowsTerminal,
+    CommandPrompt,
+    Powershell,
+    GnomeTerminal,
+    Konsole,
+    Alacritty,
+    Kitty,
+    Xterm,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -306,6 +329,7 @@ impl Default for AppSettingsDto {
             theme: AppTheme::System,
             language: AppLanguage::ZhCn,
             open_with: ProjectOpenWith::Default,
+            terminal_app: TerminalApp::Default,
             permission_mode: AppPermissionMode::default(),
         }
     }

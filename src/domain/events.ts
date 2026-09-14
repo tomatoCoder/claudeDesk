@@ -35,6 +35,7 @@ export type TaskEventData =
   | { kind: 'workspace_conflict'; projectId: string; activeTaskIds: string[] }
   | { kind: 'status_changed'; status: TaskStatus }
   | { kind: 'result'; sessionId: string; costUsd: number | null; turns: number | null }
+  | { kind: 'stopped'; seconds: number }
   | { kind: 'local_command_output'; content: string }
   | { kind: 'error'; code: string; message: string; recoverable: boolean }
   | { kind: 'unknown'; raw: unknown }

@@ -8,7 +8,7 @@ import { translate } from '../services/i18n'
 export const useProjectsStore = defineStore('projects', () => {
   const projects = ref<ProjectDto[]>([])
   const tasks = ref<TaskDto[]>([])
-  const settings = ref<AppSettingsDto>({ claudePath: null, sidebarWidth: 280, theme: 'system', language: 'zh-CN', openWith: 'default', permissionMode: 'default' })
+  const settings = ref<AppSettingsDto>({ claudePath: null, sidebarWidth: 280, theme: 'system', language: 'zh-CN', openWith: 'default', terminalApp: 'default', permissionMode: 'default' })
   const cli = ref<CliDiagnosticDto>({ status: 'probe_failed', path: null, version: null, message: translate('checkingClaudeCode') })
   const refreshingClaude = ref(false)
   const upgradingClaude = ref(false)

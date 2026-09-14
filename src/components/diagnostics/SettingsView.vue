@@ -10,6 +10,7 @@ import type {
   ProjectOpenWith,
   SaveClaudeSettingsInput,
   SaveClaudeSettingsJsonInput,
+  TerminalApp,
   ThemePreference,
 } from '../../domain/models'
 import { useI18n } from '../../services/i18n'
@@ -22,6 +23,7 @@ const props = withDefaults(defineProps<{
   theme?: ThemePreference
   language?: AppLanguage
   openWith?: ProjectOpenWith
+  terminalApp?: TerminalApp
   permissionMode?: AppPermissionMode
   cli: CliDiagnosticDto
   saving?: boolean
@@ -29,13 +31,14 @@ const props = withDefaults(defineProps<{
   upgrading?: boolean
   externalConflict?: boolean
   error?: string
-}>(), { theme: 'system', language: 'zh-CN', openWith: 'default', permissionMode: 'default' })
+}>(), { theme: 'system', language: 'zh-CN', openWith: 'default', terminalApp: 'default', permissionMode: 'default' })
 const emit = defineEmits<{
   save: [input: SaveClaudeSettingsInput]
   saveJson: [input: SaveClaudeSettingsJsonInput]
   themeChange: [theme: ThemePreference]
   languageChange: [language: AppLanguage]
   openWithChange: [openWith: ProjectOpenWith]
+  terminalAppChange: [terminalApp: TerminalApp]
   permissionModeChange: [permissionMode: AppPermissionMode]
   refresh: []
   upgrade: []
@@ -139,6 +142,10 @@ function changeLanguage(event: Event) {
 
 function changeOpenWith(event: Event) {
   emit('openWithChange', (event.target as HTMLSelectElement).value as ProjectOpenWith)
+}
+
+function changeTerminalApp(event: Event) {
+  emit('terminalAppChange', (event.target as HTMLSelectElement).value as TerminalApp)
 }
 
 function changePermissionMode(event: Event) {
@@ -259,6 +266,23 @@ function changePermissionMode(event: Event) {
                   <option value="qoder">Qoder</option>
                   <option value="vscode">VS Code</option>
                   <option value="intellij_idea">IntelliJ IDEA</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>{{ t('terminalApp') }}</span>
+                <small>{{ t('terminalAppHelp') }}</small>
+                <select :value="terminalApp" @change="changeTerminalApp">
+                  <option value="default">{{ t('systemDefault') }}</option>
+                  <option value="terminal">Terminal (macOS)</option>
+                  <option value="iterm">iTerm2 (macOS)</option>
+                  <option value="windows_terminal">Windows Terminal</option>
+                  <option value="command_prompt">Command Prompt</option>
+                  <option value="powershell">PowerShell</option>
+                  <option value="gnome_terminal">GNOME Terminal</option>
+                  <option value="konsole">Konsole</option>
+                  <option value="alacritty">Alacritty</option>
+                  <option value="kitty">Kitty</option>
+                  <option value="xterm">XTerm</option>
                 </select>
               </label>
               <label class="field">

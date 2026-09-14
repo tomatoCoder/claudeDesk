@@ -23,7 +23,8 @@ type RenderItem =
   | { type: 'cli'; key: string; content: string }
   | { type: 'error'; key: string; message: string }
   | { type: 'conflict'; key: string; count: number }
-  | { type: 'result'; key: string; cost: number | null; turns: number | null }
+  | { type: 'result'; key: string; turns: number | null }
+  | { type: 'stopped'; key: string; seconds: number }
   | { type: 'thinking'; key: string }
 
 const props = defineProps<{
@@ -171,7 +172,8 @@ const items = computed<RenderItem[]>(() => {
       case 'local_command_output': result.push({ type: 'cli', key: `${event.runId}:${event.sequence}`, content: event.data.content }); break
       case 'error': if (event.data.code !== 'api_retry') result.push({ type: 'error', key: `${event.runId}:${event.sequence}`, message: event.data.message }); break
       case 'workspace_conflict': result.push({ type: 'conflict', key: `${event.runId}:${event.sequence}`, count: event.data.activeTaskIds.length }); break
-      case 'result': result.push({ type: 'result', key: `${event.runId}:${event.sequence}`, cost: event.data.costUsd, turns: event.data.turns }); break
+      case 'result': result.push({ type: 'result', key: `${event.runId}:${event.sequence}`, turns: event.data.turns }); break
+      case 'stopped': result.push({ type: 'stopped', key: `${event.runId}:${event.sequence}`, seconds: event.data.seconds }); break
     }
   }
   // 最新一轮已有用户消息、任务运行中、本轮尚无任何助手输出 → 显示「正在思考…」占位。
@@ -210,7 +212,8 @@ defineExpose({ insertDraft })
           <QuestionCard v-else-if="item.type === 'question'" :questions="item.questions" @resolve="answer(item.requestId, $event)" @deny="denyQuestion(item.requestId)" />
           <div v-else-if="item.type === 'conflict'" class="conflict"><AlertTriangle :size="16" />{{ t('workspaceConflict', { count: item.count }) }}</div>
           <div v-else-if="item.type === 'error'" class="event-error">{{ item.message }}</div>
-          <div v-else-if="item.type === 'result'" class="result">{{ t('turnComplete') }}<span v-if="item.turns"> · {{ t('turns', { count: item.turns }) }}</span><span v-if="item.cost !== null"> · ${{ item.cost.toFixed(4) }}</span></div>
+          <div v-else-if="item.type === 'result'" class="result">{{ t('turnComplete') }}<span v-if="item.turns"> · {{ t('turns', { count: item.turns }) }}</span></div>
+          <div v-else-if="item.type === 'stopped'" class="result stopped-notice">{{ t('turnStopped', { s: item.seconds }) }}</div>
           <div v-else-if="item.type === 'thinking'" class="thinking">{{ t('thinking') }}</div>
         </template>
       </div>
@@ -222,7 +225,7 @@ defineExpose({ insertDraft })
 </template>
 
 <style scoped>
-.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.turn-time { margin: 20px 0 2px; color: var(--text-muted); font-size: 10px; text-align: center; user-select: none; }.timeline .turn-time:first-child { margin-top: 0; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.event-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
+.conversation-shell { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.conversation { min-height: 0; flex: 1; overflow: auto; scroll-padding-bottom: 120px; }.timeline { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: 26px 0 104px; }.turn-time { margin: 20px 0 2px; color: var(--text-muted); font-size: 10px; text-align: center; user-select: none; }.timeline .turn-time:first-child { margin-top: 0; }.conversation-empty { display: grid; height: 100%; place-content: center; justify-items: center; padding: 30px; text-align: center; color: var(--text-secondary); }.conversation-empty > span { color: var(--accent); font-size: 40px; }.conversation-empty h2 { margin: 12px 0 6px; color: var(--text-primary); }.conversation-empty p { max-width: 440px; margin: 0; line-height: 1.6; }.conflict,.event-error { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; }.conflict { border: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); }.event-error { border: 1px solid var(--danger-border); background: var(--danger-soft); color: var(--text-danger); }.result { margin: 22px 0; color: var(--text-muted); font-size: 11px; text-align: center; }.stopped-notice { color: var(--text-warning); }
 .thinking { margin: 10px 0; color: var(--text-muted); font-size: 13px; animation: thinking-pulse 1.2s ease-in-out infinite; }@keyframes thinking-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @media (prefers-reduced-motion: reduce) { .thinking { animation: none; } }
 .cli-output { display: flex; gap: 10px; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-header); }.cli-badge { flex: none; height: fit-content; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 700; }.cli-output pre { min-width: 0; flex: 1; margin: 0; overflow: auto; color: var(--text-secondary); font: 11px/1.6 var(--font-mono); white-space: pre-wrap; }

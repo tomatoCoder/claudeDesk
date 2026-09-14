@@ -14,10 +14,14 @@ describe('TaskRow', () => {
     expect(wrapper.get('[role="menu"]').text()).toContain('删除')
   })
 
-  it('菜单操作携带当前会话', async () => {
+  it('菜单重命名后提交会 emit 新标题', async () => {
     const wrapper = mount(TaskRow, { props: { task, selected: false } })
     await wrapper.get('.task-row').trigger('contextmenu')
     await wrapper.get('[data-action="rename"]').trigger('click')
+
+    await wrapper.get('.rename-input').setValue('新标题')
+    await wrapper.get('.rename-input').trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('rename')).toHaveLength(1)
+    expect(wrapper.emitted('rename')![0]).toEqual(['新标题'])
   })
 })

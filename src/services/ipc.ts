@@ -41,6 +41,7 @@ export const ipc = {
   addProject: (path: string) => invoke<ProjectDto>('add_project', { path }),
   removeProject: (projectId: string) => invoke<void>('remove_project', { projectId }),
   openProject: (projectId: string) => invoke<void>('open_project', { projectId }),
+  openTerminal: (projectId: string) => invoke<void>('open_terminal', { projectId }),
   listProjectDirectory: (projectId: string, path: string) =>
     invoke<ProjectFileEntry[]>('list_project_directory', { projectId, path }),
   searchProjectFiles: (projectId: string, query: string, limit = 200) =>
