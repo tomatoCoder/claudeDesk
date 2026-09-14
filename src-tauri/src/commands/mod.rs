@@ -1,4 +1,5 @@
 pub mod application;
+pub mod browser;
 pub mod clipboard;
 pub mod diagnostics;
 pub mod drag;

@@ -6,12 +6,30 @@ import { translate } from './i18n'
 
 export const isDesktop = () => '__TAURI_INTERNALS__' in window
 
+export interface BrowserPanelBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+  viewportWidth: number
+  viewportHeight: number
+  visible: boolean
+}
+
 export async function chooseProjectDirectory(): Promise<string | null> {
   const selected = await open({ directory: true, multiple: false, title: translate('selectProjectDirectory') })
   return typeof selected === 'string' ? selected : null
 }
 
 export const ipc = {
+  openBrowser: (url: string) => invoke<void>('open_browser', { url }),
+  openBrowserPanel: (url: string, bounds: BrowserPanelBounds) =>
+    invoke<void>('open_browser_panel', { url, bounds }),
+  setBrowserPanelBounds: (bounds: BrowserPanelBounds) => invoke<void>('set_browser_panel_bounds', { bounds }),
+  browserHistory: (direction: 'back' | 'forward') => invoke<void>('browser_history', { direction }),
+  refreshBrowserPanel: () => invoke<void>('refresh_browser_panel'),
+  setBrowserAnnotationMode: (enabled: boolean) => invoke<void>('set_browser_annotation_mode', { enabled }),
+  closeBrowserPanel: () => invoke<void>('close_browser_panel'),
   confirmAppExit: () => invoke<void>('confirm_app_exit'),
   saveClipboardFile: (name: string, mimeType: string, bytes: number[]) =>
     invoke<string>('save_clipboard_file', { name, mimeType, bytes }),

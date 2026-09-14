@@ -92,6 +92,44 @@ describe('FileBrowserDrawer', () => {
     wrapper.unmount()
   })
 
+  it('does not close the drawer when Delete is pressed in the file editor', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-path="README.md"]').trigger('click')
+    await flushPromises()
+    const code = wrapper.get('.source-code')
+    const range = document.createRange()
+    range.selectNodeContents(code.element)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+    await wrapper.get('.source-view').trigger('mouseup')
+    await wrapper.get('[data-testid="edit-selection"]').trigger('click')
+
+    await wrapper.get('[data-testid="file-editor"]').trigger('keydown', { key: 'Delete' })
+
+    expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('does not close the drawer when Delete is pressed in a comment input', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('[data-path="README.md"]').trigger('click')
+    await flushPromises()
+    const code = wrapper.get('.source-code')
+    const range = document.createRange()
+    range.selectNodeContents(code.element)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+    await wrapper.get('.source-view').trigger('mouseup')
+    await wrapper.get('[data-testid="comment-selection"]').trigger('click')
+
+    await wrapper.get('[data-testid="comment-input"]').trigger('keydown', { key: 'Delete' })
+
+    expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('debounces search and discards stale results returned by the service', async () => {
     vi.useFakeTimers()
     client.search.mockResolvedValueOnce(null).mockResolvedValueOnce([readme])

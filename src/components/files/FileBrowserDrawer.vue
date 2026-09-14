@@ -159,7 +159,8 @@ function addComment(path: string, startLine: number, endLine: number, content: s
   emit('comment', path, startLine, endLine, content, comment)
 }
 
-function handleEscape() {
+function handleEscape(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
   if (query.value) {
     query.value = ''
     return

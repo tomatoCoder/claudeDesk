@@ -62,6 +62,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::application::confirm_app_exit,
+            commands::browser::open_browser,
+            commands::browser::open_browser_panel,
+            commands::browser::set_browser_panel_bounds,
+            commands::browser::refresh_browser_panel,
+            commands::browser::browser_history,
+            commands::browser::set_browser_annotation_mode,
+            commands::browser::close_browser_panel,
+            commands::browser::browser_comment,
             commands::clipboard::save_clipboard_file,
             commands::drag::read_drag_file_paths,
             commands::files::list_project_directory,
