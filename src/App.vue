@@ -79,6 +79,7 @@ watch(() => projects.settings.language, setAppLanguage, { immediate: true })
 
 onMounted(async () => {
   window.addEventListener('keydown', handleFilesShortcut)
+  window.addEventListener('keydown', handleFileFindShortcut)
   window.addEventListener('keydown', handleBrowserShortcut)
   window.addEventListener('resize', syncBrowserBounds)
   getSystemThemeQuery().addEventListener('change', handleSystemThemeChange)
@@ -116,6 +117,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleFilesShortcut)
+  window.removeEventListener('keydown', handleFileFindShortcut)
   window.removeEventListener('keydown', handleBrowserShortcut)
   window.removeEventListener('resize', syncBrowserBounds)
   unlisten?.()
@@ -134,6 +136,13 @@ async function handleFilesShortcut(event: KeyboardEvent) {
   filesOpen.value = true
   await nextTick()
   await filesDrawer.value?.focusFilter()
+}
+
+function handleFileFindShortcut(event: KeyboardEvent) {
+  if (!filesOpen.value || event.isComposing || event.key.toLowerCase() !== 'f' || event.altKey || event.shiftKey) return
+  if (event.metaKey === event.ctrlKey || (!event.metaKey && !event.ctrlKey)) return
+  if (!filesDrawer.value?.focusPreviewFind()) return
+  event.preventDefault()
 }
 
 function handleBrowserShortcut(event: KeyboardEvent) {

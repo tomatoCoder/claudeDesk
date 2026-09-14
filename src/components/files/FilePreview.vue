@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from 'vue'
-import { Copy, RefreshCw, X } from 'lucide-vue-next'
+import { computed, nextTick, ref, watch, watchEffect } from 'vue'
+import { ChevronDown, ChevronUp, Copy, RefreshCw, X } from 'lucide-vue-next'
 import hljs from 'highlight.js/lib/core'
 import bash from 'highlight.js/lib/languages/bash'
 import css from 'highlight.js/lib/languages/css'
@@ -48,6 +48,11 @@ const commentOpen = ref(false)
 const commentText = ref('')
 const editing = ref(false)
 const draft = ref('')
+const findOpen = ref(false)
+const findInput = ref<HTMLInputElement | null>(null)
+const sourceView = ref<HTMLElement | null>(null)
+const findQuery = ref('')
+const activeMatch = ref(0)
 
 const extension = computed(() => props.preview?.path.split('.').pop()?.toLowerCase() ?? '')
 const isMarkdown = computed(() => ['md', 'markdown', 'mdown'].includes(extension.value))
@@ -59,12 +64,37 @@ const highlightedLines = computed(() => sourceLines.value.map((line) => {
   if (!language.value) return escapeHtml(line) || ' '
   return hljs.highlight(line || ' ', { language: language.value, ignoreIllegals: true }).value
 }))
+const findLines = computed(() => {
+  const needle = findQuery.value.toLocaleLowerCase()
+  let matchIndex = 0
+  return sourceLines.value.map((line) => {
+    if (!needle) return [{ text: line || ' ', matchIndex: null }]
+    const lower = line.toLocaleLowerCase()
+    const parts: { text: string; matchIndex: number | null }[] = []
+    let offset = 0
+    while (offset <= line.length) {
+      const index = lower.indexOf(needle, offset)
+      if (index < 0) break
+      if (index > offset) parts.push({ text: line.slice(offset, index), matchIndex: null })
+      parts.push({ text: line.slice(index, index + needle.length), matchIndex: matchIndex++ })
+      offset = index + needle.length
+    }
+    if (offset < line.length) parts.push({ text: line.slice(offset), matchIndex: null })
+    return parts.length ? parts : [{ text: line || ' ', matchIndex: null }]
+  })
+})
+const matchCount = computed(() => findLines.value.flat().filter((part) => part.matchIndex !== null).length)
 
 watch(() => props.preview?.path, () => {
   markdownPreview.value = false
   selection.value = null
   commentOpen.value = false
   editing.value = false
+  closeFind()
+})
+watch(findQuery, () => {
+  activeMatch.value = 0
+  void scrollToActiveMatch()
 })
 watchEffect((onCleanup) => {
   imageUrl.value = ''
@@ -178,6 +208,47 @@ function saveEditing() {
   emit('save', draft.value)
   editing.value = false
 }
+
+function openFind() {
+  if (props.preview?.kind !== 'text' || editing.value) return false
+  markdownPreview.value = false
+  findOpen.value = true
+  void nextTick(() => {
+    findInput.value?.focus()
+    findInput.value?.select()
+  })
+  return true
+}
+
+function closeFind() {
+  findOpen.value = false
+  findQuery.value = ''
+  activeMatch.value = 0
+}
+
+function moveMatch(direction: 1 | -1) {
+  if (!matchCount.value) return
+  activeMatch.value = (activeMatch.value + direction + matchCount.value) % matchCount.value
+  void scrollToActiveMatch()
+}
+
+async function scrollToActiveMatch() {
+  await nextTick()
+  sourceView.value?.querySelector<HTMLElement>(`[data-find-match="${activeMatch.value}"]`)
+    ?.scrollIntoView({ block: 'center', inline: 'nearest' })
+}
+
+function handleFindKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    closeFind()
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    moveMatch(event.shiftKey ? -1 : 1)
+  }
+}
+
+defineExpose({ openFind })
 </script>
 
 <template>
@@ -208,7 +279,14 @@ function saveEditing() {
     <div v-else-if="preview.kind === 'image'" class="image-preview"><img v-if="imageUrl" :src="imageUrl" :alt="preview.path" /><span>{{ formatSize(preview.size) }}</span></div>
     <div v-else-if="editing" class="editor-view"><textarea data-testid="file-editor" v-model="draft" :aria-label="t('editFile')" /></div>
     <div v-else-if="markdownPreview" class="markdown-preview" v-html="renderedMarkdown" />
-    <div v-else class="source-view" @mouseup="captureSelection" @keyup.shift="captureSelection">
+    <div v-else ref="sourceView" class="source-view" :class="{ finding: findOpen }" @mouseup="captureSelection" @keyup.shift="captureSelection">
+      <div v-if="findOpen" class="find-widget">
+        <input ref="findInput" v-model="findQuery" :placeholder="t('findInFile')" @keydown="handleFindKeydown" />
+        <span>{{ matchCount ? `${activeMatch + 1}/${matchCount}` : '0/0' }}</span>
+        <button type="button" :title="t('previousMatch')" :disabled="!matchCount" @click="moveMatch(-1)"><ChevronUp :size="14" /></button>
+        <button type="button" :title="t('nextMatch')" :disabled="!matchCount" @click="moveMatch(1)"><ChevronDown :size="14" /></button>
+        <button type="button" :title="t('close')" @click="closeFind"><X :size="14" /></button>
+      </div>
       <div v-if="selection" class="selection-actions" role="toolbar" :aria-label="t('selectedCodeActions')">
         <button data-testid="add-to-conversation" type="button" @click="addToConversation">{{ t('addToConversation') }}</button>
         <button data-testid="comment-selection" type="button" @click="openComment">{{ t('comment') }}</button>
@@ -222,10 +300,21 @@ function saveEditing() {
       <div v-for="(line, index) in highlightedLines" :key="index" class="source-line">
         <span class="line-number">{{ index + 1 }}</span><code class="source-code hljs" v-html="line" />
       </div>
+      <template v-if="findOpen">
+        <div v-for="(parts, index) in findLines" :key="`find-${index}`" class="source-line find-source-line">
+          <span class="line-number">{{ index + 1 }}</span>
+          <code class="source-code"><template v-for="(part, partIndex) in parts" :key="partIndex"><mark
+            v-if="part.matchIndex !== null"
+            :data-find-match="part.matchIndex"
+            :class="{ current: part.matchIndex === activeMatch }"
+          >{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></code>
+        </div>
+      </template>
     </div>
   </section>
 </template>
 
 <style scoped>
 .file-preview { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--surface-root); }.preview-header { display: flex; height: 48px; flex: 0 0 48px; align-items: center; gap: 5px; padding: 0 8px 0 13px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); }.breadcrumbs { display: flex; min-width: 0; flex: 1; align-items: center; gap: 5px; overflow: hidden; color: var(--text-secondary); font: 10px var(--font-mono); white-space: nowrap; }.breadcrumbs span { overflow: hidden; text-overflow: ellipsis; }.breadcrumbs .separator { flex: none; color: var(--text-muted); }.preview-header > button:not(.icon-button) { padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 10px; }.preview-header > button:hover { background: var(--surface-hover); }.icon-button { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; }.icon-button:disabled { opacity: .35; cursor: default; }.source-view { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 8px 0 30px; background: var(--surface-code); }.source-line { display: grid; min-width: max-content; grid-template-columns: 48px minmax(0,1fr); min-height: 21px; font: 12px/21px var(--font-mono); }.line-number { padding-right: 12px; color: var(--text-muted); text-align: right; user-select: none; }.source-code { display: block; padding-right: 18px; background: transparent; color: var(--text-primary); white-space: pre; }.source-code :deep(.hljs-keyword),.source-code :deep(.hljs-selector-tag) { color: #d45d5d; }.source-code :deep(.hljs-string),.source-code :deep(.hljs-attr) { color: #3e8b57; }.source-code :deep(.hljs-number),.source-code :deep(.hljs-literal) { color: #9b67c7; }.source-code :deep(.hljs-comment) { color: var(--text-muted); }.selection-actions { position: sticky; z-index: 2; top: 8px; display: flex; width: fit-content; margin: 0 0 8px 58px; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-header); box-shadow: var(--shadow-lg); }.selection-actions button { padding: 6px 9px; border: 0; border-right: 1px solid var(--border-subtle); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 11px; }.selection-actions button:last-child { border-right: 0; }.selection-actions button:hover { background: var(--surface-hover); color: var(--text-primary); }.comment-card { position: sticky; z-index: 3; top: 8px; width: min(430px, calc(100% - 32px)); margin: 0 16px 10px auto; padding: 13px; border: 1px solid var(--border-subtle); border-radius: 13px; background: var(--surface-root); box-shadow: var(--shadow-lg); }.comment-card-heading { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 11px; }.comment-card-heading strong { margin-left: auto; font-weight: 500; }.comment-avatar { display: grid; width: 23px; height: 23px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--text-on-accent); font-size: 9px; }.comment-card textarea { display: block; width: 100%; min-height: 56px; margin-top: 10px; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: 12px/1.5 var(--font-sans); }.comment-card footer { display: flex; justify-content: flex-end; gap: 8px; }.comment-card footer button { padding: 5px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11px; }.comment-card footer button:last-child { background: var(--accent); color: var(--text-on-accent); }.comment-card footer button:disabled { opacity: .4; cursor: default; }.editor-view { min-height: 0; flex: 1; padding: 10px; background: var(--surface-code); }.editor-view textarea { display: block; box-sizing: border-box; width: 100%; height: 100%; min-height: 240px; resize: none; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 8px; outline: 0; background: var(--surface-root); color: var(--text-primary); font: 12px/1.7 var(--font-mono); }.markdown-preview { min-height: 0; flex: 1; overflow: auto; padding: 22px 28px 48px; color: var(--text-primary); line-height: 1.7; }.markdown-preview :deep(pre) { overflow: auto; padding: 12px; border-radius: 8px; background: var(--surface-code); }.markdown-preview :deep(code) { font-family: var(--font-mono); }.image-preview { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 10px; overflow: auto; padding: 24px; color: var(--text-muted); font-size: 10px; }.image-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }.preview-state { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; color: var(--text-muted); font-size: 11px; text-align: center; }.preview-state strong { color: var(--text-secondary); }.preview-state.error { color: var(--text-danger); }
+.find-widget { position: sticky; z-index: 4; top: 0; display: flex; width: min(360px, calc(100% - 16px)); margin: 0 8px 8px auto; align-items: center; gap: 4px; padding: 5px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-header); box-shadow: var(--shadow-lg); }.find-widget input { min-width: 0; flex: 1; padding: 4px 6px; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: 11px var(--font-sans); }.find-widget span { flex: none; color: var(--text-muted); font: 10px var(--font-mono); }.find-widget button { display: grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; }.find-widget button:hover { background: var(--surface-hover); color: var(--text-primary); }.find-widget button:disabled { opacity: .35; cursor: default; }.find-source-line { display: none; }.source-view.finding > .source-line:not(.find-source-line) { display: none; }.source-view.finding .find-source-line { display: grid; }.source-code mark { border-radius: 2px; background: #f2c94c80; color: inherit; }.source-code mark.current { background: #f2994a; color: #201a10; }
 </style>

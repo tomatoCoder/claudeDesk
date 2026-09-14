@@ -137,8 +137,18 @@ pub fn search_files(
         })
         .filter_map(|entry| {
             let path = entry.path.to_lowercase();
-            path.contains(&query)
-                .then(|| (search_rank(&entry, &query), entry))
+            let path_match = path.contains(&query);
+            let content_match = !path_match && file_content_contains(&root, &entry.path, &query);
+            (path_match || content_match).then(|| {
+                (
+                    if path_match {
+                        search_rank(&entry, &query)
+                    } else {
+                        (4, entry.name.len())
+                    },
+                    entry,
+                )
+            })
         })
         .collect::<Vec<_>>();
     matches.sort_by(|(left_rank, left), (right_rank, right)| {
@@ -151,6 +161,27 @@ pub fn search_files(
         .map(|(_, entry)| entry)
         .take(limit.clamp(1, MAX_SEARCH_RESULTS))
         .collect())
+}
+
+fn file_content_contains(root: &Path, relative: &str, query: &str) -> bool {
+    let Ok(target) = resolve_relative(root, relative, false) else {
+        return false;
+    };
+    let Ok(metadata) = std::fs::metadata(&target) else {
+        return false;
+    };
+    if metadata.len() > MAX_PREVIEW_BYTES || mime_type(&target).is_some() {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(target) else {
+        return false;
+    };
+    if bytes.contains(&0) {
+        return false;
+    }
+    String::from_utf8(bytes)
+        .map(|content| content.to_lowercase().contains(query))
+        .unwrap_or(false)
 }
 
 fn git_files(root: &Path) -> Option<Vec<String>> {

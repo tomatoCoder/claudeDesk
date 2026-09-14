@@ -20,6 +20,7 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 const filterInput = ref<HTMLInputElement | null>(null)
+const filePreview = ref<InstanceType<typeof FilePreview> | null>(null)
 const query = ref('')
 const rootEntries = ref<ProjectFileEntry[]>([])
 const searchEntries = ref<ProjectFileEntry[]>([])
@@ -190,7 +191,11 @@ async function focusFilter() {
   filterInput.value?.focus()
 }
 
-defineExpose({ focusFilter })
+function focusPreviewFind() {
+  return filePreview.value?.openFind() ?? false
+}
+
+defineExpose({ focusFilter, focusPreviewFind })
 loadRoot()
 </script>
 
@@ -233,6 +238,7 @@ loadRoot()
         />
       </section>
       <FilePreview
+        ref="filePreview"
         v-if="selectedPath"
         :preview="preview"
         :loading="previewLoading"
