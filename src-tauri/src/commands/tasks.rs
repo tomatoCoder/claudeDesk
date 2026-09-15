@@ -1,6 +1,6 @@
 use crate::{
     commands::AppState,
-    domain::{QueuedTurnDto, RunAccepted, TaskDto, TaskEvent, TurnSubmission},
+    domain::{QueuedTurnDto, RunAccepted, TaskDto, TaskEvent, TurnSubmission, DEFAULT_TASK_TITLE},
     error::AppError,
 };
 use tauri::{AppHandle, State};
@@ -14,7 +14,7 @@ pub fn create_task(
     super::validate_id(&project_id)?;
     state
         .storage
-        .create_task(&project_id, title.as_deref().unwrap_or("新任务"))
+        .create_task(&project_id, title.as_deref().unwrap_or(DEFAULT_TASK_TITLE))
 }
 
 #[tauri::command(rename_all = "camelCase")]

@@ -8,6 +8,7 @@ import { useRuntimeStore } from './stores/runtime'
 import { chooseProjectDirectory, errorMessage, ipc } from './services/ipc'
 import { listenToTaskEvents } from './services/taskEvents'
 import { listenToQueuedTurns } from './services/queuedTurns'
+import { listenToTaskUpdates } from './services/taskUpdates'
 import { applyTheme } from './services/theme'
 import { setAppLanguage, useI18n } from './services/i18n'
 import { isFilesShortcut } from './services/fileShortcut'
@@ -92,6 +93,8 @@ onMounted(async () => {
       if (event.kind === 'status_changed') projects.updateTaskStatus(event.taskId, event.data.status)
     })
     const unlistenQueued = await listenToQueuedTurns(runtime.replaceQueuedTurns)
+    // 后端用首条用户消息自动命名会话后，同步侧边栏标题。
+    const unlistenTaskUpdates = await listenToTaskUpdates((task) => projects.patchTask(task))
     const unlistenExit = await listen<string[]>('app-exit-requested', async () => {
       if (!window.confirm(t('exitConfirm'))) return
       await ipc.confirmAppExit()
@@ -108,7 +111,7 @@ onMounted(async () => {
       if (!projects.selectedTask) { error.value = t('selectSessionForBrowserComment'); return }
       await conversationView.value?.insertDraft(formatBrowserCommentDraft(payload))
     })
-    unlisten = () => { unlistenTasks(); unlistenQueued(); unlistenExit() }
+    unlisten = () => { unlistenTasks(); unlistenQueued(); unlistenTaskUpdates(); unlistenExit() }
     await projects.hydrate()
     try { claudeSettings.value = await ipc.loadClaudeSettings() }
     catch (cause) { settingsError.value = errorMessage(cause) }

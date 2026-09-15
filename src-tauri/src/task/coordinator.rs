@@ -24,6 +24,7 @@ use crate::{
         AppPermissionMode, CliDiagnosticStatus, PermissionDecisionKind, QueuedTurnDto,
         QueuedTurnsChanged, RunAccepted, SlashCommandCatalogDto, SlashCommandsChanged, TaskDto,
         TaskEvent, TaskEventPayload, TaskPermissionMode, TaskStatus, TurnSubmission, UserQuestion,
+        DEFAULT_TASK_TITLE,
     },
     error::AppError,
     permission::{PermissionDecision, PermissionHub, PermissionRequest},
@@ -84,6 +85,39 @@ fn adjustment_action(status: &TaskStatus) -> AdjustmentAction {
         TaskStatus::Completed => AdjustmentAction::DeferToQueue,
         _ => AdjustmentAction::Reject,
     }
+}
+
+/// 从用户首条消息推导侧边栏标题：取第一段非空文本行，空白折叠为单空格，最多保留 30 个字符。
+/// 多行消息只取第一行，避免标题里混入换行。
+fn derive_task_title(prompt: &str) -> String {
+    const MAX_TITLE_CHARS: usize = 30;
+    let first_line = prompt
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    let collapsed = first_line.split_whitespace().collect::<Vec<_>>().join(" ");
+    collapsed.chars().take(MAX_TITLE_CHARS).collect()
+}
+
+/// 任务仍是默认标题时，用首条用户消息自动命名，并广播 `task-updated` 让前端侧边栏即时刷新。
+/// 命名失败不影响消息发送本身。
+fn auto_title_from_prompt(
+    storage: &Storage,
+    app: &AppHandle,
+    task: &TaskDto,
+    prompt: &str,
+) -> Result<(), AppError> {
+    if task.title != DEFAULT_TASK_TITLE {
+        return Ok(());
+    }
+    let title = derive_task_title(prompt);
+    if title.is_empty() {
+        return Ok(());
+    }
+    let updated = storage.rename_task(&task.id, &title)?;
+    app.emit("task-updated", &updated)
+        .map_err(|error| AppError::new("event_emit_failed", error.to_string(), true))
 }
 
 impl TaskCoordinator {
@@ -184,6 +218,8 @@ impl TaskCoordinator {
             },
         );
         drop(state);
+        // 首条用户消息自动命名会话标题；命名失败不影响消息发送。
+        let _ = auto_title_from_prompt(&self.storage, &app, &task, &prompt);
         self.storage
             .transition_task(&task_id, TaskStatus::Starting)?;
         publish(

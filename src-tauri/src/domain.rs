@@ -206,6 +206,9 @@ pub struct ProjectDto {
     pub last_opened_at: String,
 }
 
+/// 任务未重命名时的默认标题；发送首条消息时会用它判断是否需要自动命名。
+pub const DEFAULT_TASK_TITLE: &str = "新任务";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDto {

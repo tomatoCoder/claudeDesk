@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import type { Options, PermissionMode } from '@anthropic-ai/claude-agent-sdk'
 
 export interface QueryContext {
@@ -27,6 +28,16 @@ export function buildQueryOptions(context: QueryContext): Options {
     includePartialMessages: true,
     permissionMode: context.permissionMode ?? 'default',
     settingSources: ['user', 'project', 'local'],
+  }
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(context.claudePath)) {
+    options.spawnClaudeCodeProcess = ({ command, args, cwd, env, signal }) => spawn(command, args, {
+      cwd,
+      env,
+      signal,
+      shell: true,
+      stdio: 'pipe',
+      windowsHide: true,
+    })
   }
   if (context.permissionMode === 'bypassPermissions') options.allowDangerouslySkipPermissions = true
   if (context.sessionId) options.resume = context.sessionId
