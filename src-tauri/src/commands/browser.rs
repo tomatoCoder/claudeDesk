@@ -8,6 +8,15 @@ const MAX_URL_LENGTH: usize = 4096;
 const MAX_SELECTION_LENGTH: usize = 20_000;
 const MAX_COMMENT_LENGTH: usize = 4_000;
 
+// macOS WKWebView 的默认 User-Agent 缺少浏览器标识后缀（没有 "Version/x Safari/x"
+// 或 "Chrome/x"）。按 UA 嗅探的站点（如 www.baidu.com）会对无标识 UA 返回降级页，
+// 页面 JS 反复跳转 http:// 而 WKWebView 又自动升级回 https://，形成每秒数十次的
+// 重定向死循环，面板永远渲染不出内容（表现为白屏）。声明 Safari 身份可拿到正常页面。
+// Windows (WebView2) 与 Linux (WebKitGTK) 的默认 UA 已带浏览器标识，无需覆盖。
+#[cfg(target_os = "macos")]
+const BROWSER_USER_AGENT: &str =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserCommentPayload {
@@ -98,7 +107,7 @@ fn validate_comment(payload: &BrowserCommentPayload) -> Result<(), AppError> {
     Ok(())
 }
 
-const COMMENT_OVERLAY_SCRIPT: &str = r#"
+pub const COMMENT_OVERLAY_SCRIPT: &str = r#"
 (() => {
   if (window.__CLAUDE_DESK_BROWSER_COMMENT__) return;
   window.__CLAUDE_DESK_BROWSER_COMMENT__ = true;
@@ -156,12 +165,15 @@ const COMMENT_OVERLAY_SCRIPT: &str = r#"
         close();
       } catch (cause) {
         submit.disabled = false;
-        error.textContent = cause?.message || '评论提交失败，请重试';
+        // IPC/ACL 拒绝以纯字符串 reject（无 message 字段），也要展示出来，
+        // 否则真实原因被兜底文案吞掉，无法排查。
+        const detail = cause?.message || (typeof cause === 'string' ? cause : '');
+        error.textContent = detail || '评论提交失败，请重试';
         error.style.display = 'block';
       }
     };
     submit.addEventListener('click', send);
-    input.addEventListener('keydown', (event) => { event.stopPropagation(); if (event.key === 'Escape') close(); if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) send(); });
+    input.addEventListener('keydown', (event) => { event.stopPropagation(); if (event.key === 'Escape') close(); if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); send(); } });
     input.focus();
   };
   window.__CLAUDE_DESK_SET_ANNOTATION_MODE__ = (enabled) => { annotationMode = !!enabled; close(); clearHover(); document.documentElement.style.cursor = annotationMode ? 'crosshair' : ''; };
@@ -187,18 +199,19 @@ pub async fn open_browser_panel(url: String, bounds: BrowserPanelBounds, app: Ap
         return Ok(());
     }
     println!("[Browser Rust] creating new webview");
-    let webview = main.add_child(
-        WebviewBuilder::new(BROWSER_LABEL, WebviewUrl::External(url))
-            .initialization_script(COMMENT_OVERLAY_SCRIPT)
-            .on_page_load(|webview, payload| {
-                let _ = webview.app_handle().emit_to("main", "browser-page-state", serde_json::json!({
-                    "url": payload.url().as_str(),
-                    "loading": matches!(payload.event(), tauri::webview::PageLoadEvent::Started),
-                }));
-            }),
-        position,
-        size,
-    )
+    let mut builder = WebviewBuilder::new(BROWSER_LABEL, WebviewUrl::External(url))
+        .initialization_script(COMMENT_OVERLAY_SCRIPT)
+        .on_page_load(|webview, payload| {
+            let _ = webview.app_handle().emit_to("main", "browser-page-state", serde_json::json!({
+                "url": payload.url().as_str(),
+                "loading": matches!(payload.event(), tauri::webview::PageLoadEvent::Started),
+            }));
+        });
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.user_agent(BROWSER_USER_AGENT);
+    }
+    let webview = main.add_child(builder, position, size)
     .map_err(|error| browser_error("browser_create_failed", &error.to_string()))?;
     println!("[Browser Rust] webview created");
     if bounds.visible { println!("[Browser Rust] show new webview"); webview.show().map_err(|error| browser_error("browser_show_failed", &error.to_string()))?; } else { println!("[Browser Rust] hide new webview"); webview.hide().map_err(|error| browser_error("browser_hide_failed", &error.to_string()))?; }
@@ -321,5 +334,13 @@ mod geometry_tests {
         assert_eq!(position.x, 600.0);
         assert_eq!(position.y, 204.0);
         assert_eq!(size.height, 616.0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn browser_user_agent_carries_browser_identity() {
+        // 无 "Safari/x" 后缀的 UA 会触发 baidu 等站点的 http/https 重定向死循环。
+        assert!(BROWSER_USER_AGENT.contains("Safari/"), "UA 必须包含 Safari 标识: {BROWSER_USER_AGENT}");
+        assert!(BROWSER_USER_AGENT.contains("Mozilla/5.0"), "UA 必须是标准浏览器格式: {BROWSER_USER_AGENT}");
     }
 }

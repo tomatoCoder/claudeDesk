@@ -105,7 +105,6 @@ onMounted(async () => {
       browserAnnotationEnabled.value = false
       browserError.value = ''
       setBrowserLoading(payload.loading)
-      syncBrowserBounds()
     })
     unlistenBrowserComment = await listen<BrowserCommentPayload>('browser-comment', async ({ payload }) => {
       if (!projects.selectedTask) { error.value = t('selectSessionForBrowserComment'); return }

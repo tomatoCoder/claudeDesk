@@ -10,6 +10,10 @@ rust-version = "1.88"
 name = "claude_desk_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[dev-dependencies]
+http = "1"
+percent-encoding = "2"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

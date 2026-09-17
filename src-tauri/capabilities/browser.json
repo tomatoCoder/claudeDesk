@@ -5,7 +5,7 @@
   "webviews": ["browser-panel"],
   "local": false,
   "remote": {
-    "urls": ["http://*", "https://*"]
+    "urls": ["http://*:*", "https://*:*"]
   },
   "permissions": ["browser-comment"]
 }
