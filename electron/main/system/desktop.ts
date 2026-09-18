@@ -9,11 +9,10 @@ export async function openProject(directory: string, openWith: AppSettingsDto['o
   spawnDetached(program, [directory], directory, 'project_open_failed')
 }
 
-export function openTerminal(directory: string, terminal: string) {
+export async function openTerminal(directory: string, terminal: string) {
   if (process.platform === 'darwin') {
-    if (terminal === 'iterm') return spawnDetached('open', ['-a', 'iTerm', directory], directory, 'terminal_open_failed')
-    const escaped = directory.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    return spawnDetached('osascript', ['-e', `tell application "Terminal" to do script "cd \"${escaped}\""`], directory, 'terminal_open_failed')
+    if (terminal === 'iterm') return run('/usr/bin/open', ['-a', 'iTerm', directory], directory, 'terminal_open_failed')
+    return run('/usr/bin/open', ['-a', '/System/Applications/Utilities/Terminal.app', directory], directory, 'terminal_open_failed')
   }
   if (process.platform === 'win32') {
     if (terminal === 'command_prompt') return spawnDetached('cmd', ['/C', 'start', '', 'cmd'], directory, 'terminal_open_failed')
@@ -26,4 +25,12 @@ export function openTerminal(directory: string, terminal: string) {
 function spawnDetached(program: string, args: string[], cwd: string, code: string) {
   try { const child = spawn(program, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false }); child.unref() }
   catch (error) { throw new AppError(code, error instanceof Error ? error.message : '无法启动应用', true) }
+}
+
+function run(program: string, args: string[], cwd: string, code: string) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(program, args, { cwd, stdio: 'ignore' })
+    child.once('error', error => reject(new AppError(code, error.message, true)))
+    child.once('close', status => status === 0 ? resolve() : reject(new AppError(code, `终端启动命令退出（${status ?? 'unknown'}）`, true)))
+  })
 }

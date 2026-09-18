@@ -39,6 +39,7 @@ export const ipc = {
   setBrowserAnnotationMode: (enabled: boolean, taskId?: string) => invoke<void>('set_browser_annotation_mode', { enabled, taskId }),
   listBrowserAnnotations: (taskId: string) => invoke<BrowserAnnotation[]>('list_browser_annotations', { taskId }),
   updateBrowserAnnotation: (taskId: string, id: string, comment: string) => invoke<BrowserAnnotation | undefined>('update_browser_annotation', { taskId, id, comment }),
+  updateBrowserAnnotationStyle: (taskId: string, id: string, style: BrowserAnnotation['style']) => invoke<BrowserAnnotation | undefined>('update_browser_annotation_style', { taskId, id, style }),
   deleteBrowserAnnotation: (taskId: string, id: string) => invoke<void>('delete_browser_annotation', { taskId, id }),
   clearBrowserAnnotations: (taskId: string) => invoke<void>('clear_browser_annotations', { taskId }),
   closeBrowserPanel: () => invoke<void>('close_browser_panel'),

@@ -92,6 +92,7 @@ export const ALLOWED_COMMANDS = new Set([
   'set_browser_annotation_mode',
   'list_browser_annotations',
   'update_browser_annotation',
+  'update_browser_annotation_style',
   'delete_browser_annotation',
   'clear_browser_annotations',
   'close_browser_panel',

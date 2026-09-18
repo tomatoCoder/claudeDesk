@@ -2,14 +2,15 @@
 import type { BrowserAnnotation } from '../../services/browserAnnotations'
 import BrowserAnnotationEditor from './BrowserAnnotationEditor.vue'
 defineProps<{ annotations: BrowserAnnotation[] }>()
-const emit = defineEmits<{ update: [id: string, comment: string]; remove: [id: string]; insert: []; clear: [] }>()
+const emit = defineEmits<{ update: [id: string, comment: string]; style: [id: string, style: BrowserAnnotation['style']]; remove: [id: string]; insert: []; clear: [] }>()
 function update(id: string, comment: string) { emit('update', id, comment) }
+function updateStyle(id: string, style: BrowserAnnotation['style']) { emit('style', id, style) }
 </script>
 
 <template>
   <section class="annotation-list">
     <div class="annotation-summary"><span>{{ annotations.length }} 条标注</span><button type="button" :disabled="!annotations.some(value => value.comment.trim())" @click="emit('insert')">加入对话</button><button type="button" :disabled="!annotations.length" @click="emit('clear')">清空</button></div>
-    <div v-if="annotations.length" class="annotation-scroll"><BrowserAnnotationEditor v-for="annotation in annotations" :key="annotation.id" :annotation="annotation" @update="update" @remove="emit('remove', $event)" /></div>
+    <div v-if="annotations.length" class="annotation-scroll"><BrowserAnnotationEditor v-for="annotation in annotations" :key="annotation.id" :annotation="annotation" @update="update" @style="updateStyle" @remove="emit('remove', $event)" /></div>
     <p v-else>开启标注后，点击页面元素添加评论。</p>
   </section>
 </template>

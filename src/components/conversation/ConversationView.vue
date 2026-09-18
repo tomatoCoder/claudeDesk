@@ -10,6 +10,7 @@ import { invalidateSlashCommandCatalog, loadSlashCommandCatalog } from '../../se
 import MessageBubble from './MessageBubble.vue'
 import ToolCard from './ToolCard.vue'
 import ComposerBox from './ComposerBox.vue'
+import type { BrowserCommentPayload } from '../../services/browserUrl'
 import SlashCommandDialog, { type SlashDialogKind } from './SlashCommandDialog.vue'
 import PermissionCard from '../permissions/PermissionCard.vue'
 import QuestionCard from '../permissions/QuestionCard.vue'
@@ -83,6 +84,11 @@ function closeDialog() {
 async function insertDraft(value: string) {
   await nextTick()
   await composer.value?.insert(value)
+}
+
+async function addBrowserAnnotation(value: BrowserCommentPayload) {
+  await nextTick()
+  await composer.value?.addBrowserAnnotation(value)
 }
 
 const catalog = ref<SlashCommandCatalogDto | null>(null)
@@ -204,7 +210,7 @@ async function denyQuestion(requestId: string) { await resolve(requestId, { deci
 
 watch(() => props.events.length, async () => { await nextTick(); if (scroll.value) scroll.value.scrollTop = scroll.value.scrollHeight })
 
-defineExpose({ insertDraft })
+defineExpose({ insertDraft, addBrowserAnnotation })
 </script>
 
 <template>

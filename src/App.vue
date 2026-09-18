@@ -14,7 +14,7 @@ import { setAppLanguage, useI18n } from './services/i18n'
 import { isFilesShortcut } from './services/fileShortcut'
 import { isBrowserShortcut } from './services/browserShortcut'
 import { isTerminalShortcut } from './services/terminalShortcut'
-import { formatBrowserCommentDraft, normalizeBrowserUrl, type BrowserCommentPayload } from './services/browserUrl'
+import { normalizeBrowserUrl, type BrowserCommentPayload } from './services/browserUrl'
 import { formatBrowserAnnotations, type BrowserAnnotation } from './services/browserAnnotations'
 import AppSidebar from './components/sidebar/AppSidebar.vue'
 import ConversationView from './components/conversation/ConversationView.vue'
@@ -115,7 +115,7 @@ onMounted(async () => {
     })
     unlistenBrowserComment = await desktop.listen<BrowserCommentPayload>('browser-comment', async (payload) => {
       if (!projects.selectedTask) { error.value = t('selectSessionForBrowserComment'); return }
-      await conversationView.value?.insertDraft(formatBrowserCommentDraft(payload))
+      await conversationView.value?.addBrowserAnnotation(payload)
     })
     unlistenBrowserAnnotations = await desktop.listen<{ taskId: string; annotations: BrowserAnnotation[] }>('browser-annotations-changed', (payload) => {
       if (payload.taskId === projects.selectedTaskId) browserAnnotations.value = payload.annotations
@@ -298,6 +298,12 @@ async function deleteBrowserAnnotation(id: string) {
   const taskId = projects.selectedTaskId
   if (!taskId) return
   await ipc.deleteBrowserAnnotation(taskId, id)
+}
+
+async function updateBrowserAnnotationStyle(id: string, style: BrowserAnnotation['style']) {
+  const taskId = projects.selectedTaskId
+  if (!taskId) return
+  await ipc.updateBrowserAnnotationStyle(taskId, id, style)
 }
 
 async function clearBrowserAnnotations() {
@@ -661,6 +667,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
             @forward="browserHistory('forward')"
             @annotation-change="setBrowserAnnotation"
             @annotation-update="updateBrowserAnnotation"
+            @annotation-style="updateBrowserAnnotationStyle"
             @annotation-remove="deleteBrowserAnnotation"
             @annotations-insert="insertBrowserAnnotations"
             @annotations-clear="clearBrowserAnnotations"

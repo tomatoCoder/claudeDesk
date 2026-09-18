@@ -9,7 +9,7 @@ const eventChannel = (name: DesktopEventName) => `claude-desk:event:${name}`
 const allowedCommands = new Set([
   'open_doubao_in_chrome', 'open_browser', 'open_browser_panel', 'set_browser_panel_bounds', 'browser_history',
   'refresh_browser_panel', 'set_browser_annotation_mode', 'close_browser_panel', 'confirm_app_exit', 'save_clipboard_file',
-  'list_browser_annotations', 'update_browser_annotation', 'delete_browser_annotation', 'clear_browser_annotations',
+  'list_browser_annotations', 'update_browser_annotation', 'update_browser_annotation_style', 'delete_browser_annotation', 'clear_browser_annotations',
   'read_drag_file_paths', 'get_snapshot', 'refresh_claude_sessions', 'get_claude_session_messages', 'add_project',
   'remove_project', 'open_project', 'open_terminal', 'list_project_directory', 'search_project_files', 'read_project_file',
   'write_project_file', 'get_workspace_diff', 'create_task', 'rename_task', 'delete_task', 'list_task_events', 'send_turn', 'submit_turn',

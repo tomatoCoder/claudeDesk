@@ -69,10 +69,14 @@ export class BrowserManager {
     view.webContents.on('dom-ready', () => { view.webContents.send('browser-annotation-mode', !!this.annotationTaskId); this.restoreAnnotations() })
     view.webContents.on('ipc-message', (_event, channel, ...args) => {
       if (channel === 'browser-annotation-selected' && this.annotationTaskId) {
-        const target = browserTarget(args[0])
+        const payload = args[0] as Record<string, unknown>
+        const target = browserTarget(payload)
         if (!target || target.url !== view.webContents.getURL()) return
-        this.annotations.add(this.annotationTaskId, target)
+        let annotation = this.annotations.add(this.annotationTaskId, target)
+        if (typeof payload.comment === 'string') this.annotations.update(this.annotationTaskId, annotation.id, payload.comment.slice(0, 2000))
+        if (payload.style) annotation = this.annotations.updateStyle(this.annotationTaskId, annotation.id, browserStyle(payload.style)) || annotation
         this.publishAnnotations()
+        this.window.webContents.send(IPC_CHANNELS.event('browser-comment'), { url: target.url, selection: target.text, comment: typeof payload.comment === 'string' ? payload.comment.slice(0, 2000) : '', selector: target.selector, tagName: target.tagName, style: annotation.style, originalStyle: browserStyle(payload.originalStyle) })
         this.restoreAnnotations()
       }
       if (channel === 'browser-annotation-stale' && this.annotationTaskId && Array.isArray(args[0])) {
@@ -101,6 +105,15 @@ export class BrowserManager {
     this.window.webContents.send(IPC_CHANNELS.event('browser-page-state'), payload)
   }
 }
+
+function browserStyle(value: unknown) {
+  if (!value || typeof value !== 'object') return { color: '#000000', backgroundColor: '#ffffff', opacity: 1, fontFamily: 'Arial', fontSize: 16, fontWeight: '400', width: 0, height: 0, padding: [0, 0, 0, 0] as [number, number, number, number], margin: [0, 0, 0, 0] as [number, number, number, number], borderRadius: 0, borderColor: '#000000', borderWidth: 0 }
+  const item = value as Record<string, unknown>
+  const box = (key: string) => boxStyle(item[key])
+  return { color: typeof item.color === 'string' ? item.color.slice(0, 32) : '#000000', backgroundColor: typeof item.backgroundColor === 'string' ? item.backgroundColor.slice(0, 32) : '#ffffff', opacity: typeof item.opacity === 'number' && Number.isFinite(item.opacity) ? Math.max(0, item.opacity) : 1, fontFamily: typeof item.fontFamily === 'string' ? item.fontFamily.slice(0, 80) : 'Arial', fontSize: numberStyle(item.fontSize, 16), fontWeight: typeof item.fontWeight === 'string' ? item.fontWeight.slice(0, 20) : '400', width: numberStyle(item.width, 0), height: numberStyle(item.height, 0), padding: box('padding'), margin: box('margin'), borderRadius: numberStyle(item.borderRadius, 0), borderColor: typeof item.borderColor === 'string' ? item.borderColor.slice(0, 32) : '#000000', borderWidth: numberStyle(item.borderWidth, 0) }
+}
+function numberStyle(value: unknown, fallback: number) { return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(2000, value)) : fallback }
+function boxStyle(value: unknown): [number, number, number, number] { const items = Array.isArray(value) ? value.slice(0, 4).map(item => numberStyle(item, 0)) : []; return [items[0] ?? 0, items[1] ?? items[0] ?? 0, items[2] ?? items[0] ?? 0, items[3] ?? items[1] ?? items[0] ?? 0] }
 
 function browserTarget(value: unknown): BrowserTarget | undefined {
   if (!value || typeof value !== 'object') return

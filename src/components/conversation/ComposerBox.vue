@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowUp, Paperclip, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Paperclip, Pencil, Square, Trash2, X } from 'lucide-vue-next'
 import { useI18n } from '../../services/i18n'
 import { chooseAttachmentFiles, ipc, isDesktop } from '../../services/ipc'
 import type { QueuedTurnDto, SlashCommandDto } from '../../domain/models'
@@ -9,6 +9,7 @@ import QueuedTurnList from './QueuedTurnList.vue'
 import SlashCommandMenu from './SlashCommandMenu.vue'
 import { filterSlashCommands } from '../../services/slashCommands'
 import { desktop } from '../../platform/desktop'
+import { browserStyleChanges, formatBrowserCommentDraft, type BrowserCommentPayload } from '../../services/browserUrl'
 
 const props = defineProps<{
   disabled?: boolean
@@ -27,6 +28,8 @@ const props = defineProps<{
 const emit = defineEmits<{ stop: []; 'retry-commands': [] }>()
 const text = ref('')
 const attachments = ref<string[]>([])
+const browserAnnotations = ref<BrowserCommentPayload[]>([])
+const editingAnnotation = ref<number | null>(null)
 const caret = ref(0)
 const menuOpen = ref(false)
 const menuDismissed = ref(false)
@@ -62,7 +65,7 @@ const { t } = useI18n()
 let lastAddKey = ''
 let lastAddAt = 0
 
-const canSend = computed(() => !!text.value.trim() || attachments.value.length > 0)
+const canSend = computed(() => !!text.value.trim() || attachments.value.length > 0 || browserAnnotations.value.length > 0)
 
 async function send() {
   if (!canSend.value || props.disabled || submitting.value) return
@@ -72,10 +75,10 @@ async function send() {
   submitting.value = true
   try {
     // 附件路径逐行拼接在文本之后；文本为空时 prompt 只含路径行。
-    const value = [text.value.trim(), ...attachments.value].filter(Boolean).join('\n')
+    const value = [text.value.trim(), ...browserAnnotations.value.map(formatBrowserCommentDraft), ...attachments.value].filter(Boolean).join('\n\n')
     // submit 返回 false 表示裸命令被上层拦截（如 /model 打开对话框），此时保留输入与附件。
     const handled = await props.submit(value)
-    if (handled !== false) { text.value = ''; attachments.value = [] }
+    if (handled !== false) { text.value = ''; attachments.value = []; browserAnnotations.value = [] }
   } catch {
     // App 层已展示 IPC 错误；保留输入内容供用户修正后重试。
   } finally { submitting.value = false }
@@ -254,7 +257,15 @@ async function insert(textToInsert: string) {
   syncCaret()
 }
 
-defineExpose({ focus: () => textarea.value?.focus(), insert })
+async function addBrowserAnnotation(annotation: BrowserCommentPayload) {
+  browserAnnotations.value = [...browserAnnotations.value, annotation]
+  await nextTick()
+  textarea.value?.focus()
+}
+
+function removeBrowserAnnotation(index: number) { browserAnnotations.value = browserAnnotations.value.filter((_, item) => item !== index) }
+
+defineExpose({ focus: () => textarea.value?.focus(), insert, addBrowserAnnotation })
 </script>
 
 <template>
@@ -268,6 +279,15 @@ defineExpose({ focus: () => textarea.value?.focus(), insert })
       <ul v-if="attachments.length" class="attachments">
         <li v-for="path in attachments" :key="path" class="attachment-chip" :title="path"><Paperclip :size="12" /><span class="attachment-name">{{ basename(path) }}</span><button class="attachment-remove" type="button" :title="t('removeAttachment')" :aria-label="`${t('removeAttachment')}：${basename(path)}`" @click="removeAttachment(path)"><X :size="12" /></button></li>
       </ul>
+      <div v-if="browserAnnotations.length" class="browser-annotation-drafts">
+        <article v-for="(annotation, index) in browserAnnotations" :key="`${annotation.selector}-${index}`" class="browser-annotation-card">
+          <header><span class="annotation-tag">{{ annotation.tagName || 'element' }}</span><span class="annotation-actions"><button type="button" aria-label="编辑注释" @click="editingAnnotation = editingAnnotation === index ? null : index"><Pencil :size="13" /></button><button type="button" aria-label="删除注释" @click="removeBrowserAnnotation(index)"><Trash2 :size="13" /></button></span></header>
+          <textarea v-if="editingAnnotation === index" v-model="annotation.comment" class="annotation-comment-editor" rows="2" placeholder="描述这些更改…" />
+          <p v-else-if="annotation.comment" class="annotation-comment">{{ annotation.comment }}</p>
+          <div v-for="change in browserStyleChanges(annotation)" :key="change.property" class="annotation-change"><code>{{ change.property }}:</code><span>{{ change.before }}</span><b>→</b><strong>{{ change.after }}</strong></div>
+        </article>
+        <div class="annotation-count">⚙ {{ browserAnnotations.length }} 条</div>
+      </div>
       <textarea ref="textarea" v-model="text" rows="3" :disabled="disabled" placeholder="随心输入" :aria-label="t('sendMessage')" @keydown="keydown" @paste="handlePaste" @input="syncCaret" @keyup="syncCaret" @click="syncCaret" @select="syncCaret" />
       <div class="composer-footer"><button v-if="isDesktop()" class="attach" type="button" :disabled="disabled" :title="t('addAttachment')" :aria-label="t('addAttachment')" @click="pickFiles"><Paperclip :size="16" /></button><span class="shortcut-hint">{{ t('sendShortcut') }}</span><span v-if="model" class="model-name" :title="model">{{ model }}</span><button v-if="['starting', 'running', 'awaiting_permission', 'stopping'].includes(status)" class="stop" type="button" :title="t('stopTask')" @click="emit('stop')"><Square :size="14" /></button><button data-testid="composer-submit" class="send" type="button" :disabled="disabled || submitting || !canSend" :title="t('send')" @click="send"><ArrowUp :size="17" /></button></div>
     </div>
@@ -276,5 +296,6 @@ defineExpose({ focus: () => textarea.value?.focus(), insert })
 
 <style scoped>
 .composer-wrap { position: relative; width: min(860px, calc(100% - 48px)); margin: 0 auto 17px; }.composer { position: relative; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--surface-composer); box-shadow: var(--shadow-composer); transition: border-color .16s ease, box-shadow .16s ease; }.composer:focus-within { border-color: var(--accent-border); box-shadow: var(--shadow-composer-focus); }.composer.drag-active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-composer-focus); }.drop-hint { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; background: var(--surface-composer); color: var(--accent); font-size: 13px; font-weight: 650; pointer-events: none; }.composer textarea { display: block; width: 100%; min-height: 74px; max-height: 220px; resize: none; padding: 16px 17px 5px; border: 0; outline: 0; background: transparent; color: var(--text-primary); line-height: 1.55; }.composer textarea::placeholder { color: var(--text-muted); }.attachments { display: flex; flex: none; flex-wrap: wrap; gap: 6px; margin: 12px 17px 0; padding: 0; border: 0; list-style: none; }.attachment-chip { display: inline-flex; max-width: 240px; align-items: center; gap: 6px; padding: 4px 6px 4px 9px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface-option); color: var(--text-secondary); font-size: 11.5px; }.attachment-chip > svg { flex: none; color: var(--text-muted); }.attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.attachment-remove { display: grid; flex: none; width: 16px; height: 16px; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; transition: background .14s ease, color .14s ease; }.attachment-remove:hover { background: var(--surface-hover); color: var(--text-primary); }.composer-footer { display: flex; min-height: 42px; align-items: center; justify-content: flex-end; gap: 10px; padding: 5px 9px 8px 16px; }.composer-footer .shortcut-hint { margin-right: auto; color: var(--text-muted); font-size: 10px; }.model-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 10.5px; }.send,.stop,.attach { display: grid; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 10px; cursor: pointer; transition: transform .14s ease, background .14s ease, color .14s ease; }.send { background: var(--accent); color: var(--text-on-accent); }.send:not(:disabled):hover,.stop:hover { transform: translateY(-1px); }.send:not(:disabled):hover { background: var(--accent-hover); }.stop { background: var(--danger); color: var(--text-inverse); }.send:disabled { opacity: .3; }.attach { padding: 0; background: transparent; color: var(--text-muted); }.attach:not(:disabled):hover { background: var(--surface-hover); color: var(--text-secondary); transform: translateY(-1px); }.attach:disabled { opacity: .3; cursor: default; }
+.browser-annotation-drafts { margin: 12px 16px 0; }.browser-annotation-card { padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 11px; background: var(--surface-option); box-shadow: var(--shadow-sm); }.browser-annotation-card + .browser-annotation-card { margin-top: 7px; }.browser-annotation-card header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }.annotation-tag { padding: 2px 7px; border-radius: 6px; background: var(--surface-hover); color: var(--text-muted); font: 10px var(--font-mono); }.annotation-actions { display: flex; gap: 3px; }.annotation-actions button { display: grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }.annotation-actions button:hover { background: var(--surface-hover); color: var(--text-primary); }.annotation-change { display: flex; min-width: 0; align-items: baseline; gap: 7px; margin-top: 4px; color: var(--text-muted); font-size: 11px; }.annotation-change code { color: var(--text-secondary); }.annotation-change span,.annotation-change strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.annotation-change strong { color: var(--text-primary); font-weight: 550; }.annotation-comment { margin: 3px 0 6px; color: var(--text-secondary); font-size: 11px; }.annotation-comment-editor { min-height: 48px !important; margin: 3px 0 6px; padding: 7px !important; border: 1px solid var(--border-subtle) !important; border-radius: 7px; background: var(--surface-code) !important; font-size: 11px; }.annotation-count { display: inline-flex; margin-top: 5px; padding: 3px 7px; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-muted); font-size: 10px; }
 @media (max-width: 720px) { .composer-wrap { width: calc(100% - 28px); margin-bottom: 12px; } }
 </style>
