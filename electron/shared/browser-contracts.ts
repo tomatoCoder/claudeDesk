@@ -9,6 +9,7 @@ export interface BrowserPanelBounds {
 }
 
 export interface BrowserPageState {
+  tabId: string
   url: string
   title: string
   loading: boolean

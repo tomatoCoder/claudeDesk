@@ -16,6 +16,7 @@ import { isBrowserShortcut } from './services/browserShortcut'
 import { isTerminalShortcut } from './services/terminalShortcut'
 import { normalizeBrowserUrl, type BrowserCommentPayload } from './services/browserUrl'
 import { formatBrowserAnnotations, type BrowserAnnotation } from './services/browserAnnotations'
+import { createBrowserTab, type BrowserTab } from './services/browserTabs'
 import AppSidebar from './components/sidebar/AppSidebar.vue'
 import ConversationView from './components/conversation/ConversationView.vue'
 import SettingsView from './components/diagnostics/SettingsView.vue'
@@ -41,20 +42,16 @@ const filesWidth = ref(Math.min(960, Math.max(520, Number(localStorage.getItem('
 const filesDrawer = ref<InstanceType<typeof FileBrowserDrawer> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 const browserOpen = ref(false)
-const browserLoaded = ref(false)
-const browserLoading = ref(false)
-let browserLoadTimer: number | undefined
+const browserTabs = ref<BrowserTab[]>([])
+const activeBrowserTabId = ref('')
+const browserLoadTimers = new Map<string, number>()
 let unlistenBrowserPage: Unlisten | undefined
 let unlistenBrowserAnnotations: Unlisten | undefined
-const browserUrl = ref('')
 const browserWidth = ref(Math.min(960, Math.max(420, Number(localStorage.getItem('claude-desk:browser-width')) || 680)))
 const browserAnnotationEnabled = ref(false)
 const browserAnnotations = ref<BrowserAnnotation[]>([])
-const browserCanGoBack = ref(false)
-const browserCanGoForward = ref(false)
 const sidebarCollapsed = ref(localStorage.getItem('claude-desk:sidebar-collapsed') === 'true')
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
-const browserError = ref('')
 let unlisten: Unlisten | undefined
 let unlistenBrowserComment: Unlisten | undefined
 let settingsPoll: number | undefined
@@ -64,6 +61,7 @@ const taskEvents = computed(() => runtime.events(projects.selectedTaskId))
 const queuedTurns = computed(() => runtime.queuedTurns(projects.selectedTaskId))
 const sidebarStyle = computed(() => ({ '--sidebar-width': `${sidebarCollapsed.value ? 56 : projects.settings.sidebarWidth}px` }))
 const effectiveModel = computed(() => projects.selectedTask?.modelOverride ?? claudeSettings.value?.values.model ?? '')
+const activeBrowserTab = computed(() => browserTabs.value.find(tab => tab.id === activeBrowserTabId.value))
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
@@ -104,14 +102,20 @@ onMounted(async () => {
       if (!window.confirm(t('exitConfirm'))) return
       await ipc.confirmAppExit()
     })
-    unlistenBrowserPage = await desktop.listen<{ url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; error?: string }>('browser-page-state', (payload) => {
+    unlistenBrowserPage = await desktop.listen<{ tabId: string; url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; error?: string }>('browser-page-state', (payload) => {
       console.log('[Browser] browser-page-state', payload)
-      browserUrl.value = payload.url
-      browserAnnotationEnabled.value = false
-      browserCanGoBack.value = payload.canGoBack
-      browserCanGoForward.value = payload.canGoForward
-      browserError.value = payload.error ?? ''
-      setBrowserLoading(payload.loading)
+      const tab = browserTabs.value.find(value => value.id === payload.tabId)
+      if (!tab) return
+      tab.url = payload.url === 'about:blank' ? '' : payload.url
+      tab.title = payload.title || (tab.url ? tab.url : '新标签页')
+      tab.canGoBack = payload.canGoBack
+      tab.canGoForward = payload.canGoForward
+      tab.error = payload.error ?? ''
+      setBrowserLoading(payload.tabId, payload.loading)
+      if (payload.tabId === activeBrowserTabId.value) {
+        if (payload.loading && browserAnnotationEnabled.value) { browserAnnotationEnabled.value = false; void ipc.setBrowserAnnotationMode(false) }
+        void syncBrowserBounds()
+      }
     })
     unlistenBrowserComment = await desktop.listen<BrowserCommentPayload>('browser-comment', async (payload) => {
       if (!projects.selectedTask) { error.value = t('selectSessionForBrowserComment'); return }
@@ -140,7 +144,7 @@ onBeforeUnmount(() => {
   unlistenBrowserComment?.()
   unlistenBrowserPage?.()
   unlistenBrowserAnnotations?.()
-  window.clearTimeout(browserLoadTimer)
+  for (const timer of browserLoadTimers.values()) window.clearTimeout(timer)
   if (settingsPoll) window.clearInterval(settingsPoll)
   systemThemeQuery?.removeEventListener('change', handleSystemThemeChange)
   void ipc.closeBrowserPanel()
@@ -178,12 +182,22 @@ function handleTerminalShortcut(event: KeyboardEvent) {
 
 async function openBrowserPanel() {
   filesOpen.value = false
-  browserError.value = ''
+  const tab = createBrowserTab()
+  browserTabs.value.push(tab)
+  activeBrowserTabId.value = tab.id
   browserOpen.value = true
   await nextTick()
-  await browserPanel.value?.focusAddress()
-  console.log('[Browser] openBrowserPanel', { browserOpen: browserOpen.value, browserLoaded: browserLoaded.value, browserWidth: browserWidth.value })
-  syncBrowserBounds()
+  const bounds = browserPanel.value?.webviewBounds()
+  if (!bounds) { browserTabs.value = browserTabs.value.filter(value => value.id !== tab.id); browserOpen.value = browserTabs.value.length > 0; return }
+  try {
+    await ipc.createBrowserTab(tab.id, { ...bounds, visible: false })
+    await browserPanel.value?.focusAddress()
+    syncBrowserBounds()
+  } catch (cause) {
+    browserTabs.value = browserTabs.value.filter(value => value.id !== tab.id)
+    browserOpen.value = browserTabs.value.length > 0
+    error.value = errorMessage(cause)
+  }
 }
 
 async function openDoubao() {
@@ -198,18 +212,47 @@ async function openTerminal() {
 }
 
 async function navigateBrowser(value: string) {
-  browserError.value = ''
+  const tab = activeBrowserTab.value
+  if (!tab) return
+  tab.error = ''
   try {
-    browserUrl.value = normalizeBrowserUrl(value)
+    tab.url = normalizeBrowserUrl(value)
+    tab.loaded = true
     const bounds = browserPanel.value?.webviewBounds()
     console.log('[Browser] navigateBrowser bounds', bounds)
     if (!bounds) throw new Error(t('browserPanelUnavailable'))
-    setBrowserLoading(true)
-    await ipc.openBrowserPanel(browserUrl.value, { ...bounds, visible: browserOpen.value })
-    browserLoaded.value = true
-    console.log('[Browser] navigateBrowser success, loaded=true')
+    setBrowserLoading(tab.id, true)
+    await ipc.openBrowserPanel(tab.id, tab.url, { ...bounds, visible: browserOpen.value })
     syncBrowserBounds()
-  } catch (cause) { console.error('[Browser] navigateBrowser error', cause); setBrowserLoading(false); browserError.value = errorMessage(cause); syncBrowserBounds() }
+  } catch (cause) { console.error('[Browser] navigateBrowser error', cause); setBrowserLoading(tab.id, false); tab.error = errorMessage(cause); syncBrowserBounds() }
+}
+
+async function selectBrowserTab(tabId: string) {
+  if (tabId === activeBrowserTabId.value || !browserTabs.value.some(tab => tab.id === tabId)) return
+  try {
+    await ipc.setBrowserAnnotationMode(false)
+    await ipc.selectBrowserTab(tabId)
+    activeBrowserTabId.value = tabId
+    browserAnnotationEnabled.value = false
+    await nextTick()
+    await syncBrowserBounds()
+    if (!activeBrowserTab.value?.loaded) await browserPanel.value?.focusAddress()
+  } catch (cause) { error.value = errorMessage(cause) }
+}
+
+async function closeBrowserTab(tabId: string) {
+  const index = browserTabs.value.findIndex(tab => tab.id === tabId)
+  if (index < 0) return
+  const wasActive = activeBrowserTabId.value === tabId
+  const next = browserTabs.value[index + 1] ?? browserTabs.value[index - 1]
+  try { await ipc.closeBrowserTab(tabId) }
+  catch (cause) { error.value = errorMessage(cause); return }
+  const timer = browserLoadTimers.get(tabId)
+  if (timer) window.clearTimeout(timer)
+  browserLoadTimers.delete(tabId)
+  browserTabs.value.splice(index, 1)
+  if (!browserTabs.value.length) { activeBrowserTabId.value = ''; closeBrowserPanel(); return }
+  if (wasActive && next) { activeBrowserTabId.value = ''; await selectBrowserTab(next.id) }
 }
 
 function resizeBrowser(width: number) {
@@ -229,8 +272,7 @@ async function syncBrowserBounds() {
       browserBoundsPending = false
       await nextTick()
       const bounds = browserPanel.value?.webviewBounds()
-      const visible = browserLoaded.value && !browserError.value
-      console.log('[Browser] syncBrowserBounds', { browserOpen: browserOpen.value, browserLoaded: browserLoaded.value, browserError: browserError.value, visible, bounds })
+      const visible = !!activeBrowserTab.value?.loaded && !activeBrowserTab.value.error
       if (browserOpen.value && bounds) {
         await ipc.setBrowserPanelBounds({ ...bounds, visible })
       } else {
@@ -238,11 +280,11 @@ async function syncBrowserBounds() {
         await ipc.closeBrowserPanel()
       }
     }
-  } catch (cause) { console.error('[Browser] syncBrowserBounds error', cause); browserError.value = errorMessage(cause) }
+  } catch (cause) { console.error('[Browser] syncBrowserBounds error', cause); if (activeBrowserTab.value) activeBrowserTab.value.error = errorMessage(cause) }
   finally { syncingBrowser = false }
 }
 
-watch([sidebarCollapsed, () => projects.settings.sidebarWidth, filesOpen, settingsOpen, browserWidth, () => projects.selectedTaskId], syncBrowserBounds, { flush: 'post' })
+watch([sidebarCollapsed, () => projects.settings.sidebarWidth, filesOpen, settingsOpen, browserWidth, activeBrowserTabId, () => projects.selectedTaskId], syncBrowserBounds, { flush: 'post' })
 
 function closeBrowserPanel() {
   browserOpen.value = false
@@ -250,33 +292,41 @@ function closeBrowserPanel() {
   void syncBrowserBounds()
 }
 
-function setBrowserLoading(loading: boolean) {
-  window.clearTimeout(browserLoadTimer)
-  browserLoading.value = loading
-  console.log('[Browser] setBrowserLoading', loading)
-  if (loading) browserLoadTimer = window.setTimeout(() => {
-    browserLoading.value = false
-    browserError.value = '网页加载超时，请检查网址或网络后重试。'
-    console.log('[Browser] load timeout')
+function setBrowserLoading(tabId: string, loading: boolean) {
+  const tab = browserTabs.value.find(value => value.id === tabId)
+  if (!tab) return
+  const previous = browserLoadTimers.get(tabId)
+  if (previous) window.clearTimeout(previous)
+  browserLoadTimers.delete(tabId)
+  tab.loading = loading
+  if (!loading) return
+  const timer = window.setTimeout(() => {
+    tab.loading = false
+    tab.error = '网页加载超时，请检查网址或网络后重试。'
+    browserLoadTimers.delete(tabId)
     void syncBrowserBounds()
   }, 30000)
+  browserLoadTimers.set(tabId, timer)
 }
 
 async function refreshBrowser() {
-  if (!browserLoaded.value) return
-  browserError.value = ''
-  setBrowserLoading(true)
-  try { await ipc.refreshBrowserPanel(); await syncBrowserBounds() }
-  catch (cause) { setBrowserLoading(false); browserError.value = errorMessage(cause) }
+  const tab = activeBrowserTab.value
+  if (!tab?.loaded) return
+  tab.error = ''
+  setBrowserLoading(tab.id, true)
+  try { await ipc.refreshBrowserPanel(tab.id); await syncBrowserBounds() }
+  catch (cause) { setBrowserLoading(tab.id, false); tab.error = errorMessage(cause) }
 }
 
 async function browserHistory(direction: 'back' | 'forward') {
-  try { await ipc.browserHistory(direction) }
-  catch (cause) { browserError.value = errorMessage(cause) }
+  const tab = activeBrowserTab.value
+  if (!tab) return
+  try { await ipc.browserHistory(tab.id, direction) }
+  catch (cause) { tab.error = errorMessage(cause) }
 }
 
 async function setBrowserAnnotation(enabled: boolean) {
-  browserError.value = ''
+  if (activeBrowserTab.value) activeBrowserTab.value.error = ''
   try {
     const taskId = projects.selectedTaskId
     if (enabled && !taskId) throw new Error(t('selectSessionForBrowserComment'))
@@ -284,7 +334,7 @@ async function setBrowserAnnotation(enabled: boolean) {
     browserAnnotationEnabled.value = enabled
   } catch (cause) {
     browserAnnotationEnabled.value = false
-    browserError.value = errorMessage(cause)
+    if (activeBrowserTab.value) activeBrowserTab.value.error = errorMessage(cause)
   }
 }
 
@@ -650,16 +700,19 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
             v-if="browserOpen"
             ref="browserPanel"
             :width="browserWidth"
-            :url="browserUrl"
-            :loaded="browserLoaded"
-            :loading="browserLoading"
-            :can-go-back="browserCanGoBack"
-            :can-go-forward="browserCanGoForward"
+            :url="activeBrowserTab?.url ?? ''"
+            :loaded="activeBrowserTab?.loaded ?? false"
+            :loading="activeBrowserTab?.loading ?? false"
+            :can-go-back="activeBrowserTab?.canGoBack ?? false"
+            :can-go-forward="activeBrowserTab?.canGoForward ?? false"
             :annotation-enabled="browserAnnotationEnabled"
             :annotations="browserAnnotations"
-            :error="browserError"
+            :error="activeBrowserTab?.error ?? ''"
+            :tabs="browserTabs"
+            :active-tab-id="activeBrowserTabId"
             @close="closeBrowserPanel"
-
+            @tab-select="selectBrowserTab"
+            @tab-close="closeBrowserTab"
             @resize="resizeBrowser"
             @navigate="navigateBrowser"
             @refresh="refreshBrowser"

@@ -31,11 +31,14 @@ export async function chooseAttachmentFiles(title: string): Promise<string[]> {
 export const ipc = {
   openDoubaoInChrome: () => invoke<void>('open_doubao_in_chrome'),
   openBrowser: (url: string) => invoke<void>('open_browser', { url }),
-  openBrowserPanel: (url: string, bounds: BrowserPanelBounds) =>
-    invoke<void>('open_browser_panel', { url, bounds }),
+  createBrowserTab: (tabId: string, bounds: BrowserPanelBounds) => invoke<void>('create_browser_tab', { tabId, bounds }),
+  selectBrowserTab: (tabId: string) => invoke<void>('select_browser_tab', { tabId }),
+  closeBrowserTab: (tabId: string) => invoke<void>('close_browser_tab', { tabId }),
+  openBrowserPanel: (tabId: string, url: string, bounds: BrowserPanelBounds) =>
+    invoke<void>('open_browser_panel', { tabId, url, bounds }),
   setBrowserPanelBounds: (bounds: BrowserPanelBounds) => invoke<void>('set_browser_panel_bounds', { bounds }),
-  browserHistory: (direction: 'back' | 'forward') => invoke<void>('browser_history', { direction }),
-  refreshBrowserPanel: () => invoke<void>('refresh_browser_panel'),
+  browserHistory: (tabId: string, direction: 'back' | 'forward') => invoke<void>('browser_history', { tabId, direction }),
+  refreshBrowserPanel: (tabId: string) => invoke<void>('refresh_browser_panel', { tabId }),
   setBrowserAnnotationMode: (enabled: boolean, taskId?: string) => invoke<void>('set_browser_annotation_mode', { enabled, taskId }),
   listBrowserAnnotations: (taskId: string) => invoke<BrowserAnnotation[]>('list_browser_annotations', { taskId }),
   updateBrowserAnnotation: (taskId: string, id: string, comment: string) => invoke<BrowserAnnotation | undefined>('update_browser_annotation', { taskId, id, comment }),

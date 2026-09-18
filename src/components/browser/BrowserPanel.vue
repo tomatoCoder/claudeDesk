@@ -3,9 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, ArrowRight, Globe, Maximize2, MessageSquarePlus, Minimize2, RefreshCw, X } from 'lucide-vue-next'
 import { useI18n } from '../../services/i18n'
 import type { BrowserAnnotation } from '../../services/browserAnnotations'
+import type { BrowserTab } from '../../services/browserTabs'
 
-const props = defineProps<{ width: number; url: string; loaded: boolean; loading: boolean; canGoBack: boolean; canGoForward: boolean; annotationEnabled: boolean; annotations: BrowserAnnotation[]; error: string }>()
-const emit = defineEmits<{ close: []; resize: [width: number]; navigate: [url: string]; refresh: []; back: []; forward: []; annotationChange: [enabled: boolean]; annotationUpdate: [id: string, comment: string]; annotationStyle: [id: string, style: BrowserAnnotation['style']]; annotationRemove: [id: string]; annotationsInsert: []; annotationsClear: []; boundsChange: [] }>()
+const props = defineProps<{ width: number; url: string; loaded: boolean; loading: boolean; canGoBack: boolean; canGoForward: boolean; annotationEnabled: boolean; annotations: BrowserAnnotation[]; error: string; tabs: BrowserTab[]; activeTabId: string }>()
+const emit = defineEmits<{ close: []; resize: [width: number]; navigate: [url: string]; refresh: []; back: []; forward: []; tabSelect: [id: string]; tabClose: [id: string]; annotationChange: [enabled: boolean]; annotationUpdate: [id: string, comment: string]; annotationStyle: [id: string, style: BrowserAnnotation['style']]; annotationRemove: [id: string]; annotationsInsert: []; annotationsClear: []; boundsChange: [] }>()
 const { t } = useI18n()
 const address = ref(props.url)
 const fullscreen = ref(false)
@@ -73,6 +74,9 @@ defineExpose({ focusAddress, webviewBounds })
       <button class="icon-button" type="button" :title="fullscreen ? '退出全屏' : '全屏显示'" :aria-label="fullscreen ? '退出全屏' : '全屏显示'" :aria-pressed="fullscreen" @click="toggleFullscreen()"><Minimize2 v-if="fullscreen" :size="16" /><Maximize2 v-else :size="16" /></button>
       <button class="icon-button" type="button" :title="t('close')" :aria-label="t('close')" @click="emit('close')"><X :size="17" /></button>
     </header>
+    <div class="browser-tabs" role="tablist" aria-label="浏览器标签页">
+      <button v-for="tab in tabs" :key="tab.id" class="browser-tab" :class="{ active: tab.id === activeTabId }" type="button" role="tab" :aria-selected="tab.id === activeTabId" :title="tab.title" @click="emit('tabSelect', tab.id)"><span>{{ tab.title || '新标签页' }}</span><i v-if="tab.loading" aria-hidden="true" /><X :size="13" role="button" aria-label="关闭标签页" @click.stop="emit('tabClose', tab.id)" /></button>
+    </div>
     <div class="browser-toolbar">
       <button class="icon-button" type="button" title="后退" aria-label="后退" :disabled="!loaded || !canGoBack" @click="emit('back')"><ArrowLeft :size="15" /></button>
       <button class="icon-button" type="button" title="前进" aria-label="前进" :disabled="!loaded || !canGoForward" @click="emit('forward')"><ArrowRight :size="15" /></button>
@@ -98,6 +102,7 @@ defineExpose({ focusAddress, webviewBounds })
 .browser-resizer { position: absolute; z-index: 3; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; }
 .browser-header { display: flex; min-height: 42px; flex: 0 0 42px; align-items: center; gap: 6px; padding: 0 8px 0 13px; background: var(--surface-header); }
 .browser-title { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }.browser-header-spacer { flex: 1; }
+.browser-tabs { display: flex; min-height: 34px; flex: 0 0 34px; gap: 3px; overflow-x: auto; padding: 4px 8px 0; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); scrollbar-width: none; }.browser-tabs::-webkit-scrollbar { display: none; }.browser-tab { display: flex; min-width: 92px; max-width: 180px; height: 29px; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 7px 0 10px; border: 1px solid transparent; border-radius: 7px 7px 0 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11px; }.browser-tab.active { border-color: var(--border-subtle); border-bottom-color: var(--surface-root); background: var(--surface-root); color: var(--text-primary); }.browser-tab span { min-width: 0; flex: 1; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }.browser-tab svg { flex: none; border-radius: 4px; }.browser-tab svg:hover { background: var(--surface-hover); }.browser-tab i { width: 8px; height: 8px; flex: none; border: 1px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 .browser-toolbar { display: flex; flex: 0 0 46px; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); }
 .browser-address { display: flex; min-width: 0; flex: 1; align-items: center; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-root); }
 .browser-address:focus-within { border-color: var(--accent); }

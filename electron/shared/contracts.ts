@@ -85,6 +85,9 @@ export const IPC_CHANNELS = {
 export const ALLOWED_COMMANDS = new Set([
   'open_doubao_in_chrome',
   'open_browser',
+  'create_browser_tab',
+  'select_browser_tab',
+  'close_browser_tab',
   'open_browser_panel',
   'set_browser_panel_bounds',
   'browser_history',

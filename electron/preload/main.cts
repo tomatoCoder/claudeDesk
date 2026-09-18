@@ -7,7 +7,7 @@ const invokeChannel = 'claude-desk:invoke'
 const openFilesChannel = 'claude-desk:open-files'
 const eventChannel = (name: DesktopEventName) => `claude-desk:event:${name}`
 const allowedCommands = new Set([
-  'open_doubao_in_chrome', 'open_browser', 'open_browser_panel', 'set_browser_panel_bounds', 'browser_history',
+  'open_doubao_in_chrome', 'open_browser', 'create_browser_tab', 'select_browser_tab', 'close_browser_tab', 'open_browser_panel', 'set_browser_panel_bounds', 'browser_history',
   'refresh_browser_panel', 'set_browser_annotation_mode', 'close_browser_panel', 'confirm_app_exit', 'save_clipboard_file',
   'list_browser_annotations', 'update_browser_annotation', 'update_browser_annotation_style', 'delete_browser_annotation', 'clear_browser_annotations',
   'read_drag_file_paths', 'get_snapshot', 'refresh_claude_sessions', 'get_claude_session_messages', 'add_project',

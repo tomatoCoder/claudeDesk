@@ -6,11 +6,14 @@ import type { BrowserManager } from './manager.js'
 import type { BrowserAnnotationStore } from './annotations.js'
 
 export function registerBrowserCommands(browser: BrowserManager, annotations: BrowserAnnotationStore) {
-  registerCommand('open_browser_panel', ({ url, bounds }) => browser.open(text(url), browserBounds(bounds)))
-  registerCommand('open_browser', ({ url }) => browser.open(text(url), { x: 0, y: 0, width: 1, height: 1, viewportWidth: 1, viewportHeight: 1, visible: false }))
+  registerCommand('create_browser_tab', ({ tabId, bounds }) => browser.create(tab(text(tabId)), browserBounds(bounds)))
+  registerCommand('select_browser_tab', ({ tabId }) => browser.select(tab(text(tabId))))
+  registerCommand('close_browser_tab', ({ tabId }) => browser.closeTab(tab(text(tabId))))
+  registerCommand('open_browser_panel', ({ tabId, url, bounds }) => browser.open(tab(text(tabId)), text(url), browserBounds(bounds)))
+  registerCommand('open_browser', ({ url }) => browser.open(`external-${Date.now()}`, text(url), { x: 0, y: 0, width: 1, height: 1, viewportWidth: 1, viewportHeight: 1, visible: false }))
   registerCommand('set_browser_panel_bounds', ({ bounds }) => browser.setBounds(browserBounds(bounds)))
-  registerCommand('browser_history', ({ direction }) => { if (direction !== 'back' && direction !== 'forward') throw new AppError('browser_history_invalid', '浏览器历史方向无效', true); browser.history(direction) })
-  registerCommand('refresh_browser_panel', () => browser.refresh())
+  registerCommand('browser_history', ({ tabId, direction }) => { if (direction !== 'back' && direction !== 'forward') throw new AppError('browser_history_invalid', '浏览器历史方向无效', true); browser.history(tab(text(tabId)), direction) })
+  registerCommand('refresh_browser_panel', ({ tabId }) => browser.refresh(tab(text(tabId))))
   registerCommand('close_browser_panel', () => browser.close())
   registerCommand('set_browser_annotation_mode', ({ enabled, taskId }) => browser.setAnnotationMode(enabled === true, optionalText(taskId)))
   registerCommand('list_browser_annotations', ({ taskId }) => annotations.list(text(taskId)))
@@ -21,6 +24,7 @@ export function registerBrowserCommands(browser: BrowserManager, annotations: Br
   registerCommand('open_doubao_in_chrome', () => shell.openExternal('https://www.doubao.com'))
 }
 function text(value: unknown) { if (typeof value !== 'string') throw new AppError('invalid_argument', '参数格式无效', true); return value }
+function tab(value: string) { if (!value || value.length > 100) throw new AppError('browser_tab_invalid', '浏览器标签页无效', true); return value }
 function optionalText(value: unknown) { return typeof value === 'string' ? value : undefined }
 function browserStyle(value: unknown) {
   if (!value || typeof value !== 'object') throw new AppError('browser_style_invalid', '样式参数无效', true)
