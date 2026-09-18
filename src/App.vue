@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ExternalLink, Files, Globe, RefreshCw, Terminal } from 'lucide-vue-next'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { desktop, type Unlisten } from './platform/desktop'
 import type { AppLanguage, AppPermissionMode, ClaudeSettingsDto, ProjectOpenWith, SaveClaudeSettingsInput, SaveClaudeSettingsJsonInput, TerminalApp, ThemePreference } from './domain/models'
 import { useProjectsStore } from './stores/projects'
 import { useRuntimeStore } from './stores/runtime'
@@ -43,15 +43,15 @@ const browserOpen = ref(false)
 const browserLoaded = ref(false)
 const browserLoading = ref(false)
 let browserLoadTimer: number | undefined
-let unlistenBrowserPage: UnlistenFn | undefined
+let unlistenBrowserPage: Unlisten | undefined
 const browserUrl = ref('')
 const browserWidth = ref(Math.min(960, Math.max(420, Number(localStorage.getItem('claude-desk:browser-width')) || 680)))
 const browserAnnotationEnabled = ref(false)
 const sidebarCollapsed = ref(localStorage.getItem('claude-desk:sidebar-collapsed') === 'true')
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const browserError = ref('')
-let unlisten: UnlistenFn | undefined
-let unlistenBrowserComment: UnlistenFn | undefined
+let unlisten: Unlisten | undefined
+let unlistenBrowserComment: Unlisten | undefined
 let settingsPoll: number | undefined
 let systemThemeQuery: MediaQueryList | undefined
 
@@ -95,18 +95,18 @@ onMounted(async () => {
     const unlistenQueued = await listenToQueuedTurns(runtime.replaceQueuedTurns)
     // 后端用首条用户消息自动命名会话后，同步侧边栏标题。
     const unlistenTaskUpdates = await listenToTaskUpdates((task) => projects.patchTask(task))
-    const unlistenExit = await listen<string[]>('app-exit-requested', async () => {
+    const unlistenExit = await desktop.listen<string[]>('app-exit-requested', async () => {
       if (!window.confirm(t('exitConfirm'))) return
       await ipc.confirmAppExit()
     })
-    unlistenBrowserPage = await listen<{ url: string; loading: boolean }>('browser-page-state', ({ payload }) => {
+    unlistenBrowserPage = await desktop.listen<{ url: string; loading: boolean }>('browser-page-state', (payload) => {
       console.log('[Browser] browser-page-state', payload)
       browserUrl.value = payload.url
       browserAnnotationEnabled.value = false
       browserError.value = ''
       setBrowserLoading(payload.loading)
     })
-    unlistenBrowserComment = await listen<BrowserCommentPayload>('browser-comment', async ({ payload }) => {
+    unlistenBrowserComment = await desktop.listen<BrowserCommentPayload>('browser-comment', async (payload) => {
       if (!projects.selectedTask) { error.value = t('selectSessionForBrowserComment'); return }
       await conversationView.value?.insertDraft(formatBrowserCommentDraft(payload))
     })

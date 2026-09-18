@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { open } from '@tauri-apps/plugin-dialog'
 import { ArrowUp, Paperclip, Square, X } from 'lucide-vue-next'
 import { useI18n } from '../../services/i18n'
-import { ipc, isDesktop } from '../../services/ipc'
+import { chooseAttachmentFiles, ipc, isDesktop } from '../../services/ipc'
 import type { QueuedTurnDto, SlashCommandDto } from '../../domain/models'
 import type { TaskStatus } from '../../domain/events'
 import QueuedTurnList from './QueuedTurnList.vue'
@@ -157,8 +156,7 @@ function basename(path: string) {
 async function pickFiles() {
   if (props.disabled || !isDesktop()) return
   try {
-    const selected = await open({ multiple: true, title: t('addAttachment') })
-    const paths = Array.isArray(selected) ? selected : selected ? [selected] : []
+    const paths = await chooseAttachmentFiles(t('addAttachment'))
     if (paths.length) addAttachments(paths)
   } catch {
     // 对话框打开失败时静默忽略，不打断输入。

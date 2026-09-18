@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertTriangle } from 'lucide-vue-next'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { desktop, type Unlisten } from '../../platform/desktop'
 import type { QueuedTurnDto, SlashCommandCatalogDto, SlashCommandsChanged, TaskDto } from '../../domain/models'
 import type { TaskEvent } from '../../domain/events'
 import { errorMessage, ipc } from '../../services/ipc'
@@ -88,7 +88,7 @@ async function insertDraft(value: string) {
 const catalog = ref<SlashCommandCatalogDto | null>(null)
 const catalogLoading = ref(false)
 const catalogError = ref('')
-let unlistenCommands: UnlistenFn | undefined
+let unlistenCommands: Unlisten | undefined
 // 递增令牌：项目切换或 slash-commands-changed 会让在途请求作废，防止晚到的旧目录覆盖新数据。
 let catalogRequestId = 0
 
@@ -114,7 +114,7 @@ watch(() => props.task.projectId, () => {
 }, { immediate: true })
 
 onMounted(async () => {
-  unlistenCommands = await listen<SlashCommandsChanged>('slash-commands-changed', ({ payload }) => {
+  unlistenCommands = await desktop.listen<SlashCommandsChanged>('slash-commands-changed', (payload) => {
     invalidateSlashCommandCatalog(payload.projectId)
     if (payload.projectId === props.task.projectId) {
       catalogRequestId++

@@ -1,10 +1,11 @@
-import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
+import { desktop, isDesktopPlatformAvailable } from '../platform/desktop'
 import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, ProjectFileEntry, ProjectFilePreview, QueuedTurnDto, RunAccepted, SlashCommandCatalogDto, TaskDto, TurnSubmission } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
 import { translate } from './i18n'
 
-export const isDesktop = () => '__TAURI_INTERNALS__' in window
+const invoke = desktop.invoke.bind(desktop)
+
+export const isDesktop = isDesktopPlatformAvailable
 
 export interface BrowserPanelBounds {
   x: number
@@ -17,8 +18,13 @@ export interface BrowserPanelBounds {
 }
 
 export async function chooseProjectDirectory(): Promise<string | null> {
-  const selected = await open({ directory: true, multiple: false, title: translate('selectProjectDirectory') })
+  const selected = await desktop.openFiles({ directory: true, multiple: false, title: translate('selectProjectDirectory') })
   return typeof selected === 'string' ? selected : null
+}
+
+export async function chooseAttachmentFiles(title: string): Promise<string[]> {
+  const selected = await desktop.openFiles({ multiple: true, title })
+  return Array.isArray(selected) ? selected : selected ? [selected] : []
 }
 
 export const ipc = {

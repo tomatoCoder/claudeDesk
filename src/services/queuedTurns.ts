@@ -1,5 +1,5 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { QueuedTurnsChanged } from '../domain/models'
+import { desktop, type Unlisten } from '../platform/desktop'
 
 export function isQueuedTurnsChanged(value: unknown): value is QueuedTurnsChanged {
   if (!value || typeof value !== 'object') return false
@@ -15,8 +15,8 @@ export function isQueuedTurnsChanged(value: unknown): value is QueuedTurnsChange
   })
 }
 
-export async function listenToQueuedTurns(onChange: (event: QueuedTurnsChanged) => void): Promise<UnlistenFn> {
-  return listen<unknown>('queued-turns-changed', ({ payload }) => {
+export async function listenToQueuedTurns(onChange: (event: QueuedTurnsChanged) => void): Promise<Unlisten> {
+  return desktop.listen<unknown>('queued-turns-changed', (payload) => {
     if (isQueuedTurnsChanged(payload)) onChange(payload)
   })
 }
