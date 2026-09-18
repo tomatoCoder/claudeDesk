@@ -52,6 +52,9 @@ const browserAnnotationEnabled = ref(false)
 const browserAnnotations = ref<BrowserAnnotation[]>([])
 const sidebarCollapsed = ref(localStorage.getItem('claude-desk:sidebar-collapsed') === 'true')
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
+const taskTitleInput = ref<HTMLInputElement | null>(null)
+const taskTitleEditing = ref(false)
+const taskTitleDraft = ref('')
 let unlisten: Unlisten | undefined
 let unlistenBrowserComment: Unlisten | undefined
 let settingsPoll: number | undefined
@@ -368,6 +371,7 @@ async function insertBrowserAnnotations() {
 }
 
 watch(() => projects.selectedTaskId, async (taskId) => {
+  cancelTaskTitleEdit()
   browserAnnotationEnabled.value = false
   await ipc.setBrowserAnnotationMode(false)
   browserAnnotations.value = taskId ? await ipc.listBrowserAnnotations(taskId) : []
@@ -434,6 +438,26 @@ async function removeTask(taskId: string) {
 async function renameTask(taskId: string, title: string) {
   try { await projects.renameTask(taskId, title) }
   catch (cause) { error.value = errorMessage(cause) }
+}
+
+async function startTaskTitleEdit() {
+  if (!projects.selectedTask) return
+  taskTitleDraft.value = projects.selectedTask.title
+  taskTitleEditing.value = true
+  await nextTick()
+  taskTitleInput.value?.select()
+}
+
+function cancelTaskTitleEdit() { taskTitleEditing.value = false; taskTitleDraft.value = '' }
+
+async function saveTaskTitle() {
+  if (!taskTitleEditing.value || !projects.selectedTask) return
+  const taskId = projects.selectedTask.id
+  const previous = projects.selectedTask.title
+  const title = taskTitleDraft.value.trim()
+  taskTitleEditing.value = false
+  taskTitleDraft.value = ''
+  if (title && title !== previous) await renameTask(taskId, title)
 }
 
 async function submit(text: string) {
@@ -650,7 +674,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
       </section>
       <template v-else-if="projects.selectedTask">
         <header class="task-header">
-          <div class="task-heading"><h1>{{ projects.selectedTask.title }}</h1><StatusPill :status="projects.selectedTask.status" /></div>
+          <div class="task-heading"><input v-if="taskTitleEditing" ref="taskTitleInput" v-model="taskTitleDraft" class="task-title-input" maxlength="200" aria-label="重命名任务" @keydown.enter.prevent="saveTaskTitle" @keydown.esc.prevent="cancelTaskTitleEdit" @blur="saveTaskTitle" /><h1 v-else title="双击重命名" @dblclick="startTaskTitleEdit">{{ projects.selectedTask.title }}</h1><StatusPill :status="projects.selectedTask.status" /></div>
           <div class="task-path" :title="projects.selectedProject?.path">{{ projects.selectedProject?.path }}</div>
           <button
             data-testid="terminal-button"
@@ -730,7 +754,7 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
 </template>
 
 <style scoped>
-.app-shell { display: grid; grid-template-columns: var(--sidebar-width, 280px) minmax(0,1fr) auto; width: 100vw; height: 100vh; background: var(--surface-root); }.workspace { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; }.task-header { display: flex; height: 58px; flex: 0 0 58px; align-items: center; gap: 10px; padding: 0 16px 0 20px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); }.task-heading { min-width: 0; }.task-heading h1 { max-width: 300px; overflow: hidden; margin: 0 0 2px; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }.task-path { min-width: 0; flex: 1; overflow: hidden; color: var(--text-muted); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.model-chip { max-width: 210px; overflow: hidden; padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-secondary); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.files-button { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 11px; }.files-button:hover,.files-button.active { border-color: var(--border-subtle); background: var(--surface-hover); color: var(--text-primary); }.workspace-body { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }.conversation-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.cli-banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); font-size: 12px; }.cli-banner span { flex: 1; }.cli-banner button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: inherit; cursor: pointer; text-decoration: underline; }.loading-screen,.settings-loading { display: flex; flex: 1; align-items: center; justify-content: center; gap: 10px; color: var(--text-secondary); }.loading-screen span { color: var(--accent); font-size: 25px; }.global-error { position: absolute; z-index: 30; right: 16px; bottom: 14px; width: min(520px, calc(100% - 32px)); box-shadow: var(--shadow-lg); }.browser-dialog-backdrop { position: absolute; z-index: 40; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, #000 28%, transparent); }.browser-dialog { width: min(440px, calc(100% - 32px)); padding: 16px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-root); box-shadow: var(--shadow-lg); }.browser-dialog label { display: block; margin-bottom: 10px; color: var(--text-primary); font-size: 13px; font-weight: 650; }.browser-dialog input { box-sizing: border-box; width: 100%; padding: 9px 10px; border: 1px solid var(--border-strong); border-radius: 7px; outline: 0; background: var(--surface-code); color: var(--text-primary); }.browser-dialog input:focus { border-color: var(--accent); }.browser-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }.browser-dialog button { padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; }.browser-dialog button[type="submit"] { background: var(--accent); color: var(--text-on-accent); }.browser-error { margin: 8px 0 0; color: var(--danger); font-size: 11px; }
+.app-shell { display: grid; grid-template-columns: var(--sidebar-width, 280px) minmax(0,1fr) auto; width: 100vw; height: 100vh; background: var(--surface-root); }.workspace { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; }.task-header { display: flex; height: 58px; flex: 0 0 58px; align-items: center; gap: 10px; padding: 0 16px 0 20px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-header); }.task-heading { min-width: 0; }.task-heading h1 { max-width: 300px; overflow: hidden; margin: 0 0 2px; cursor: text; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }.task-title-input { box-sizing: border-box; width: min(300px, 28vw); height: 24px; margin: 0 0 2px; padding: 2px 6px; border: 1px solid var(--accent); border-radius: 5px; outline: 0; background: var(--surface-root); color: var(--text-primary); font: 650 14px var(--font-sans); box-shadow: 0 0 0 2px var(--accent-soft); }.task-path { min-width: 0; flex: 1; overflow: hidden; color: var(--text-muted); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.model-chip { max-width: 210px; overflow: hidden; padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-secondary); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }.files-button { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 11px; }.files-button:hover,.files-button.active { border-color: var(--border-subtle); background: var(--surface-hover); color: var(--text-primary); }.workspace-body { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }.conversation-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }.cli-banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--warning-border); background: var(--warning-soft); color: var(--text-warning); font-size: 12px; }.cli-banner span { flex: 1; }.cli-banner button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: inherit; cursor: pointer; text-decoration: underline; }.loading-screen,.settings-loading { display: flex; flex: 1; align-items: center; justify-content: center; gap: 10px; color: var(--text-secondary); }.loading-screen span { color: var(--accent); font-size: 25px; }.global-error { position: absolute; z-index: 30; right: 16px; bottom: 14px; width: min(520px, calc(100% - 32px)); box-shadow: var(--shadow-lg); }.browser-dialog-backdrop { position: absolute; z-index: 40; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, #000 28%, transparent); }.browser-dialog { width: min(440px, calc(100% - 32px)); padding: 16px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-root); box-shadow: var(--shadow-lg); }.browser-dialog label { display: block; margin-bottom: 10px; color: var(--text-primary); font-size: 13px; font-weight: 650; }.browser-dialog input { box-sizing: border-box; width: 100%; padding: 9px 10px; border: 1px solid var(--border-strong); border-radius: 7px; outline: 0; background: var(--surface-code); color: var(--text-primary); }.browser-dialog input:focus { border-color: var(--accent); }.browser-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }.browser-dialog button { padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; }.browser-dialog button[type="submit"] { background: var(--accent); color: var(--text-on-accent); }.browser-error { margin: 8px 0 0; color: var(--danger); font-size: 11px; }
 @media (max-width: 800px) { .app-shell { --sidebar-width: 230px !important; }.task-path { display: none; } }
 @media (max-width: 960px) { .workspace-body :deep(.files-drawer) { position: absolute; top: 0; right: 0; bottom: 0; max-width: 100%; } }
 </style>
