@@ -15,6 +15,7 @@ import { isFilesShortcut } from './services/fileShortcut'
 import { isBrowserShortcut } from './services/browserShortcut'
 import { isTerminalShortcut } from './services/terminalShortcut'
 import { formatBrowserCommentDraft, normalizeBrowserUrl, type BrowserCommentPayload } from './services/browserUrl'
+import { formatBrowserAnnotations, type BrowserAnnotation } from './services/browserAnnotations'
 import AppSidebar from './components/sidebar/AppSidebar.vue'
 import ConversationView from './components/conversation/ConversationView.vue'
 import SettingsView from './components/diagnostics/SettingsView.vue'
@@ -44,9 +45,13 @@ const browserLoaded = ref(false)
 const browserLoading = ref(false)
 let browserLoadTimer: number | undefined
 let unlistenBrowserPage: Unlisten | undefined
+let unlistenBrowserAnnotations: Unlisten | undefined
 const browserUrl = ref('')
 const browserWidth = ref(Math.min(960, Math.max(420, Number(localStorage.getItem('claude-desk:browser-width')) || 680)))
 const browserAnnotationEnabled = ref(false)
+const browserAnnotations = ref<BrowserAnnotation[]>([])
+const browserCanGoBack = ref(false)
+const browserCanGoForward = ref(false)
 const sidebarCollapsed = ref(localStorage.getItem('claude-desk:sidebar-collapsed') === 'true')
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const browserError = ref('')
@@ -99,16 +104,21 @@ onMounted(async () => {
       if (!window.confirm(t('exitConfirm'))) return
       await ipc.confirmAppExit()
     })
-    unlistenBrowserPage = await desktop.listen<{ url: string; loading: boolean }>('browser-page-state', (payload) => {
+    unlistenBrowserPage = await desktop.listen<{ url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; error?: string }>('browser-page-state', (payload) => {
       console.log('[Browser] browser-page-state', payload)
       browserUrl.value = payload.url
       browserAnnotationEnabled.value = false
-      browserError.value = ''
+      browserCanGoBack.value = payload.canGoBack
+      browserCanGoForward.value = payload.canGoForward
+      browserError.value = payload.error ?? ''
       setBrowserLoading(payload.loading)
     })
     unlistenBrowserComment = await desktop.listen<BrowserCommentPayload>('browser-comment', async (payload) => {
       if (!projects.selectedTask) { error.value = t('selectSessionForBrowserComment'); return }
       await conversationView.value?.insertDraft(formatBrowserCommentDraft(payload))
+    })
+    unlistenBrowserAnnotations = await desktop.listen<{ taskId: string; annotations: BrowserAnnotation[] }>('browser-annotations-changed', (payload) => {
+      if (payload.taskId === projects.selectedTaskId) browserAnnotations.value = payload.annotations
     })
     unlisten = () => { unlistenTasks(); unlistenQueued(); unlistenTaskUpdates(); unlistenExit() }
     await projects.hydrate()
@@ -129,6 +139,7 @@ onBeforeUnmount(() => {
   unlisten?.()
   unlistenBrowserComment?.()
   unlistenBrowserPage?.()
+  unlistenBrowserAnnotations?.()
   window.clearTimeout(browserLoadTimer)
   if (settingsPoll) window.clearInterval(settingsPoll)
   systemThemeQuery?.removeEventListener('change', handleSystemThemeChange)
@@ -267,13 +278,44 @@ async function browserHistory(direction: 'back' | 'forward') {
 async function setBrowserAnnotation(enabled: boolean) {
   browserError.value = ''
   try {
-    await ipc.setBrowserAnnotationMode(enabled)
+    const taskId = projects.selectedTaskId
+    if (enabled && !taskId) throw new Error(t('selectSessionForBrowserComment'))
+    await ipc.setBrowserAnnotationMode(enabled, taskId || undefined)
     browserAnnotationEnabled.value = enabled
   } catch (cause) {
     browserAnnotationEnabled.value = false
     browserError.value = errorMessage(cause)
   }
 }
+
+async function updateBrowserAnnotation(id: string, comment: string) {
+  const taskId = projects.selectedTaskId
+  if (!taskId) return
+  await ipc.updateBrowserAnnotation(taskId, id, comment)
+}
+
+async function deleteBrowserAnnotation(id: string) {
+  const taskId = projects.selectedTaskId
+  if (!taskId) return
+  await ipc.deleteBrowserAnnotation(taskId, id)
+}
+
+async function clearBrowserAnnotations() {
+  const taskId = projects.selectedTaskId
+  if (!taskId) return
+  await ipc.clearBrowserAnnotations(taskId)
+}
+
+async function insertBrowserAnnotations() {
+  const draft = formatBrowserAnnotations(browserAnnotations.value)
+  if (draft) await conversationView.value?.insertDraft(draft)
+}
+
+watch(() => projects.selectedTaskId, async (taskId) => {
+  browserAnnotationEnabled.value = false
+  await ipc.setBrowserAnnotationMode(false)
+  browserAnnotations.value = taskId ? await ipc.listBrowserAnnotations(taskId) : []
+})
 
 async function toggleFiles() {
   filesOpen.value = !filesOpen.value
@@ -605,7 +647,10 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
             :url="browserUrl"
             :loaded="browserLoaded"
             :loading="browserLoading"
+            :can-go-back="browserCanGoBack"
+            :can-go-forward="browserCanGoForward"
             :annotation-enabled="browserAnnotationEnabled"
+            :annotations="browserAnnotations"
             :error="browserError"
             @close="closeBrowserPanel"
 
@@ -615,6 +660,10 @@ async function changePermissionMode(permissionMode: AppPermissionMode) {
             @back="browserHistory('back')"
             @forward="browserHistory('forward')"
             @annotation-change="setBrowserAnnotation"
+            @annotation-update="updateBrowserAnnotation"
+            @annotation-remove="deleteBrowserAnnotation"
+            @annotations-insert="insertBrowserAnnotations"
+            @annotations-clear="clearBrowserAnnotations"
             @bounds-change="syncBrowserBounds"
           />
   </main>

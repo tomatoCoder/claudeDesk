@@ -1,7 +1,3 @@
-import { invoke as tauriInvoke } from '@tauri-apps/api/core'
-import { listen as tauriListen } from '@tauri-apps/api/event'
-import { open as tauriOpen } from '@tauri-apps/plugin-dialog'
-
 export type Unlisten = () => void
 
 export interface OpenFilesOptions {
@@ -14,19 +10,13 @@ export interface DesktopPlatform {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
   listen<T>(event: string, handler: (payload: T) => void): Promise<Unlisten>
   openFiles(options: OpenFilesOptions): Promise<string | string[] | null>
+  filePath?(file: File): string
 }
 
 declare global {
   interface Window {
     claudeDeskDesktop?: DesktopPlatform
-    __TAURI_INTERNALS__?: unknown
   }
-}
-
-const tauriPlatform: DesktopPlatform = {
-  invoke: (command, args) => tauriInvoke(command, args),
-  listen: async (event, handler) => tauriListen(event, ({ payload }) => handler(payload as never)),
-  openFiles: (options) => tauriOpen(options),
 }
 
 let installedPlatform: DesktopPlatform | undefined
@@ -35,6 +25,7 @@ export const desktop: DesktopPlatform = {
   invoke: (command, args) => platform().invoke(command, args),
   listen: (event, handler) => platform().listen(event, handler),
   openFiles: (options) => platform().openFiles(options),
+  filePath: (file) => platform().filePath?.(file) ?? (file as File & { path?: string }).path ?? '',
 }
 
 export function installDesktopPlatform(value: DesktopPlatform) {
@@ -42,10 +33,11 @@ export function installDesktopPlatform(value: DesktopPlatform) {
 }
 
 export function isDesktopPlatformAvailable() {
-  return !!installedPlatform || !!window.claudeDeskDesktop || '__TAURI_INTERNALS__' in window
+  return !!installedPlatform || !!window.claudeDeskDesktop
 }
 
 function platform() {
-  return installedPlatform ?? window.claudeDeskDesktop ?? tauriPlatform
+  const value = installedPlatform ?? window.claudeDeskDesktop
+  if (!value) throw new Error('Electron 桌面接口不可用')
+  return value
 }
-

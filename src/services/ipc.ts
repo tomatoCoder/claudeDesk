@@ -2,6 +2,7 @@ import { desktop, isDesktopPlatformAvailable } from '../platform/desktop'
 import type { AppSettingsDto, AppSnapshot, ClaudeSessionMessage, ClaudeSettingsDto, CliDiagnosticDto, ManagedClaudeSettings, ProjectDto, ProjectFileEntry, ProjectFilePreview, QueuedTurnDto, RunAccepted, SlashCommandCatalogDto, TaskDto, TurnSubmission } from '../domain/models'
 import type { TaskEvent } from '../domain/events'
 import { translate } from './i18n'
+import type { BrowserAnnotation } from './browserAnnotations'
 
 const invoke = desktop.invoke.bind(desktop)
 
@@ -35,7 +36,11 @@ export const ipc = {
   setBrowserPanelBounds: (bounds: BrowserPanelBounds) => invoke<void>('set_browser_panel_bounds', { bounds }),
   browserHistory: (direction: 'back' | 'forward') => invoke<void>('browser_history', { direction }),
   refreshBrowserPanel: () => invoke<void>('refresh_browser_panel'),
-  setBrowserAnnotationMode: (enabled: boolean) => invoke<void>('set_browser_annotation_mode', { enabled }),
+  setBrowserAnnotationMode: (enabled: boolean, taskId?: string) => invoke<void>('set_browser_annotation_mode', { enabled, taskId }),
+  listBrowserAnnotations: (taskId: string) => invoke<BrowserAnnotation[]>('list_browser_annotations', { taskId }),
+  updateBrowserAnnotation: (taskId: string, id: string, comment: string) => invoke<BrowserAnnotation | undefined>('update_browser_annotation', { taskId, id, comment }),
+  deleteBrowserAnnotation: (taskId: string, id: string) => invoke<void>('delete_browser_annotation', { taskId, id }),
+  clearBrowserAnnotations: (taskId: string) => invoke<void>('clear_browser_annotations', { taskId }),
   closeBrowserPanel: () => invoke<void>('close_browser_panel'),
   confirmAppExit: () => invoke<void>('confirm_app_exit'),
   saveClipboardFile: (name: string, mimeType: string, bytes: number[]) =>
@@ -75,6 +80,7 @@ export const ipc = {
     invoke<void>('resolve_permission', { taskId, requestId, decision, updatedInput, permissionUpdate }),
   diagnoseClaude: () => invoke<CliDiagnosticDto>('diagnose_claude'),
   upgradeClaude: () => invoke<CliDiagnosticDto>('upgrade_claude'),
+  readRawLog: (taskId: string) => invoke<string>('read_raw_log', { taskId }),
   saveSettings: (settings: AppSettingsDto) => invoke<AppSettingsDto>('save_settings', { settings }),
   loadClaudeSettings: () => invoke<ClaudeSettingsDto>('get_claude_settings'),
   saveClaudeSettings: (version: string, values: ManagedClaudeSettings) =>

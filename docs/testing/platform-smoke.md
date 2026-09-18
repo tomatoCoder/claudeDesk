@@ -33,7 +33,7 @@
 
 - Vue 前端只有结构化 Tauri IPC 和文件夹选择权限，没有 shell execute/spawn 权限。
 - 提示词、Token 和路径不拼接到 shell 命令字符串；Bridge 只接收结构化 JSONL。
-- 最终安装包内包含 Agent Bridge sidecar，但不包含或下载 Claude CLI。
+- 最终安装包内包含 TypeScript Agent Bridge runtime，但不包含或下载 Claude CLI。
 - Bridge 协议版本、请求 ID、运行 ID 和事件序号均被校验；输出有大小限制且错误会脱敏。
 - 权限请求在超时、连接断开、停止或退出时默认拒绝。
 - `settings.json` 非法时阻止写入；写入使用临时文件替换，并保留时间戳备份。

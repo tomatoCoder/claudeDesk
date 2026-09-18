@@ -1,4 +1,0 @@
-[[permission]]
-identifier = "browser-comment"
-description = "Allows a remote browser page to submit a text-only comment."
-commands.allow = ["browser_comment"]

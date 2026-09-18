@@ -2,14 +2,13 @@
 .worktrees/
 node_modules/
 dist/
+dist-electron/
 .vite/
 coverage/
 playwright-report/
 test-results/
-src-tauri/target/
-src-tauri/gen/
-src-tauri/binaries/claude-agent-bridge-*
 artifacts/
+release/
 *.log
 *.db
 *.db-shm

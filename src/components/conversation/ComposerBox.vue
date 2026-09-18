@@ -8,6 +8,7 @@ import type { TaskStatus } from '../../domain/events'
 import QueuedTurnList from './QueuedTurnList.vue'
 import SlashCommandMenu from './SlashCommandMenu.vue'
 import { filterSlashCommands } from '../../services/slashCommands'
+import { desktop } from '../../platform/desktop'
 
 const props = defineProps<{
   disabled?: boolean
@@ -208,7 +209,7 @@ function fileUriToPath(value: string) {
 
 function browserDropPaths(dataTransfer: DataTransfer) {
   const filePaths = [...dataTransfer.files]
-    .map((file) => (file as File & { path?: string }).path)
+    .map((file) => desktop.filePath?.(file) || (file as File & { path?: string }).path)
     .filter((path): path is string => !!path)
   const uriPaths = dataTransfer.getData('text/uri-list')
     .split(/\r?\n/)

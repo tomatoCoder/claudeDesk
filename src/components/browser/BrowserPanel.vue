@@ -2,9 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, ArrowRight, Globe, MessageSquarePlus, RefreshCw, X } from 'lucide-vue-next'
 import { useI18n } from '../../services/i18n'
+import type { BrowserAnnotation } from '../../services/browserAnnotations'
+import BrowserAnnotationList from './BrowserAnnotationList.vue'
 
-const props = defineProps<{ width: number; url: string; loaded: boolean; loading: boolean; annotationEnabled: boolean; error: string }>()
-const emit = defineEmits<{ close: []; resize: [width: number]; navigate: [url: string]; refresh: []; back: []; forward: []; annotationChange: [enabled: boolean]; boundsChange: [] }>()
+const props = defineProps<{ width: number; url: string; loaded: boolean; loading: boolean; canGoBack: boolean; canGoForward: boolean; annotationEnabled: boolean; annotations: BrowserAnnotation[]; error: string }>()
+const emit = defineEmits<{ close: []; resize: [width: number]; navigate: [url: string]; refresh: []; back: []; forward: []; annotationChange: [enabled: boolean]; annotationUpdate: [id: string, comment: string]; annotationRemove: [id: string]; annotationsInsert: []; annotationsClear: []; boundsChange: [] }>()
+function updateAnnotation(id: string, comment: string) { emit('annotationUpdate', id, comment) }
 const { t } = useI18n()
 const address = ref(props.url)
 const addressInput = ref<HTMLInputElement | null>(null)
@@ -67,14 +70,15 @@ defineExpose({ focusAddress, webviewBounds })
       <button class="icon-button" type="button" :title="t('close')" :aria-label="t('close')" @click="emit('close')"><X :size="17" /></button>
     </header>
     <div class="browser-toolbar">
-      <button class="icon-button" type="button" title="后退" aria-label="后退" :disabled="!loaded" @click="emit('back')"><ArrowLeft :size="15" /></button>
-      <button class="icon-button" type="button" title="前进" aria-label="前进" :disabled="!loaded" @click="emit('forward')"><ArrowRight :size="15" /></button>
+      <button class="icon-button" type="button" title="后退" aria-label="后退" :disabled="!loaded || !canGoBack" @click="emit('back')"><ArrowLeft :size="15" /></button>
+      <button class="icon-button" type="button" title="前进" aria-label="前进" :disabled="!loaded || !canGoForward" @click="emit('forward')"><ArrowRight :size="15" /></button>
       <button class="icon-button" type="button" :title="t('refresh')" :aria-label="t('refresh')" :disabled="!loaded" @click="emit('refresh')"><RefreshCw :size="15" :class="{ spinning: loading }" /></button>
       <form class="browser-address" @submit.prevent="navigate">
         <input ref="addressInput" v-model="displayAddress" :aria-label="t('browserAddress')" :placeholder="t('browserAddress')" spellcheck="false" autocomplete="off" @focus="addressInput?.select()" />
         <button type="submit" class="icon-button" title="打开网址" aria-label="打开网址"><ArrowRight :size="15" /></button>
       </form>
     </div>
+    <BrowserAnnotationList v-if="annotationEnabled || annotations.length" :annotations="annotations" @update="updateAnnotation" @remove="emit('annotationRemove', $event)" @insert="emit('annotationsInsert')" @clear="emit('annotationsClear')" />
     <p v-if="error" class="browser-error" role="alert">{{ error }}<button type="button" @click="navigate">重试</button></p>
     <div ref="webviewHost" class="browser-webview-host">
       <div v-if="!loaded" class="browser-empty"><Globe :size="24" /><strong>{{ t('browserStartTitle') }}</strong><span>{{ t('browserStartHelp') }}</span></div>
