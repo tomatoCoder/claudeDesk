@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } f
 import path from 'node:path'
 
 const target = process.argv[2]
-const args = ['--config', 'electron-builder.yml']
+const args = ['--config', 'electron-builder.yml', '--publish', 'never']
 if (target === 'mac') args.push('--mac', ...process.argv.slice(3))
 else if (target === 'windows') args.push('--win', '--x64')
 else throw new Error('目标必须是 mac 或 windows')
