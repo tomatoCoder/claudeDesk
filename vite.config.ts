@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue'
 const host = process.env.ELECTRON_DEV_HOST
 
 export default defineConfig({
+  base: './',
   plugins: [vue()],
   clearScreen: false,
   server: {
