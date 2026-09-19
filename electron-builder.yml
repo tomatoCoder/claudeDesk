@@ -10,10 +10,8 @@ files:
   - package.json
   - node_modules/**
 extraResources:
-  - from: bridge/dist
-    to: bridge/dist
-  - from: bridge/node_modules
-    to: bridge/node_modules
+  - from: bridge/packaged
+    to: bridge
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**

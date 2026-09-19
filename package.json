@@ -16,7 +16,8 @@
     "bridge:catalog-exit:test": "pnpm bridge:build:dev && node --test scripts/bridge-catalog-exit.node-test.mjs",
     "build": "pnpm bridge:build:dev && pnpm electron:compile && vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
-    "bundle:mac": "node scripts/build-electron.mjs mac",
+    "bundle:mac": "node scripts/build-electron.mjs mac --arm64",
+    "bundle:mac:arm64": "node scripts/build-electron.mjs mac --arm64",
     "bundle:mac:intel": "node scripts/build-electron.mjs mac --x64",
     "bundle:windows": "node scripts/build-electron.mjs windows",
     "verify:bundle": "node scripts/verify-electron-bundle.mjs"

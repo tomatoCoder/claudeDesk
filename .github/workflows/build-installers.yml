@@ -10,36 +10,33 @@ jobs:
       matrix:
         include:
           - os: macos-14
-            target: aarch64-apple-darwin
-            bundle: app,dmg
+            command: bundle:mac:arm64
             artifact: claude-desk-macos-arm64
           - os: macos-15-intel
-            target: x86_64-apple-darwin
-            bundle: app,dmg
+            command: bundle:mac:intel
             artifact: claude-desk-macos-intel
           - os: windows-2022
-            target: x86_64-pc-windows-msvc
-            bundle: nsis
+            command: bundle:windows
             artifact: claude-desk-windows-x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.8.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build installer
-        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+        run: pnpm ${{ matrix.command }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/**
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
           if-no-files-found: error

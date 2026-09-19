@@ -45,8 +45,7 @@ pnpm build
 macOS：
 
 ```bash
-pnpm bundle:mac
-# Intel 单架构
+pnpm bundle:mac:arm64
 pnpm bundle:mac:intel
 ```
 
@@ -56,7 +55,7 @@ Windows x64：
 pnpm bundle:windows
 ```
 
-产物统一写入 `release/`。`CSC_LINK` 与 `CSC_KEY_PASSWORD` 可用于代码签名；macOS 同时提供 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 时启用公证。凭据不得写入仓库。
+`pnpm bundle:mac` 等同于 `pnpm bundle:mac:arm64`。产物统一写入 `release/`。GitHub Actions 可手动运行 `Build installers`，并分别上传 macOS arm64、macOS Intel 和 Windows x64 三份构建产物。`CSC_LINK` 与 `CSC_KEY_PASSWORD` 可用于代码签名；macOS 同时提供 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 时启用公证。凭据不得写入仓库。
 
 ## 本地数据
 
